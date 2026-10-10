@@ -4,7 +4,6 @@ from sqlalchemy.future import select
 from app.core.deps import get_current_user, require_roles
 
 
-
 from app.core.database import get_db
 from app.core.security import (
     hash_password,
@@ -87,6 +86,6 @@ async def login(
         "user": user,
     }
 
-@router.get("/me")
+@router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user

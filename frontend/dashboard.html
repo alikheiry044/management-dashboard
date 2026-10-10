@@ -1,50 +1,210 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>داشبورد مدیریتی</title>
-    <link rel="stylesheet" href="css/style.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>داشبورد مدیرعامل | RAYAD</title>
+<style>
+:root{
+  --bg:#f3f5f8;--panel:#fff;--ink:#15202b;--muted:#6b7280;--line:#e5e7eb;
+  --navy:#111827;--gold:#c9a227;--gold2:#e3c45e;
+  --green:#15966f;--greenbg:#e8f7f1;--red:#d9343a;--redbg:#feecee;
+  --orange:#d97706;--orangebg:#fff4e3;--blue:#2563eb;--bluebg:#eaf1ff;
+  --shadow:0 8px 30px rgba(15,23,42,.06);--r:16px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Tahoma,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink)}
+button,select{font:inherit;cursor:pointer}
+.app{min-height:100vh;display:flex}
+.sidebar{width:260px;position:fixed;right:0;top:0;bottom:0;background:linear-gradient(180deg,var(--navy),#0c1320);color:#fff;padding:20px 15px;z-index:20}
+.brand{display:flex;align-items:center;gap:10px;padding:10px 12px 26px;border-bottom:1px solid rgba(255,255,255,.08)}
+.logo{width:42px;height:42px;border:1px solid rgba(227,196,94,.55);border-radius:13px;display:grid;place-items:center;color:var(--gold2);font-weight:900}
+.brand b{font-size:16px}.brand small{display:block;color:#aeb8c6;margin-top:3px;font-size:10px}
+.nav{padding-top:15px}
+.nav a{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;color:#cbd5e1;text-align:right;padding:12px;border-radius:11px;margin:3px 0;text-decoration:none;font-size:13px}
+.nav a:hover,.nav a.active{background:#263244;color:#fff}
+.nav a.active{box-shadow:inset -3px 0 0 var(--gold2)}
+.main{margin-right:260px;width:calc(100% - 260px);min-width:0}
+.topbar{height:70px;background:rgba(255,255,255,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px;position:sticky;top:0;z-index:10}
+.titleRow h1{margin:0;font-size:20px}
+.titleRow p{margin:4px 0 0;color:var(--muted);font-size:12px}
+.content{padding:24px 30px 40px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+
+/* KPI Cards - Rayad Style */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px}
+.kpi-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;box-shadow:var(--shadow);position:relative}
+.kpi-card .icon{position:absolute;left:20px;top:20px;font-size:24px;opacity:.2}
+.kpi-label{font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.kpi-value{font-size:22px;font-weight:900;color:var(--ink);margin-bottom:4px}
+.kpi-sub{font-size:11px;color:var(--muted)}
+.kpi-sub.up{color:var(--green)}
+.kpi-sub.down{color:var(--red)}
+
+/* Two Column Layout */
+.two-col{display:grid;grid-template-columns:1.2fr 0.8fr;gap:20px;margin-bottom:24px}
+@media(max-width:1000px){.two-col{grid-template-columns:1fr}}
+
+/* Alert Items - Rayad Style */
+.alert-item{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;margin-bottom:10px;border:1px solid;transition:all .2s}
+.alert-item:hover{transform:translateX(-4px)}
+.alert-high{background:var(--redbg);border-color:#f8b4b8;color:#b4232a}
+.alert-medium{background:var(--orangebg);border-color:#f6d7a6;color:#a45100}
+.alert-badge{padding:4px 10px;border-radius:20px;font-size:10px;font-weight:800;background:rgba(255,255,255,.8);white-space:nowrap}
+.alert-text{flex:1;font-size:13px;font-weight:600}
+.alert-reason{font-size:11px;color:var(--muted);margin-top:2px;font-weight:400}
+.alert-amount{font-weight:800;font-size:13px;white-space:nowrap}
+
+/* Manager Focus */
+.focus-item{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:13px}
+.focus-item:last-child{border-bottom:none}
+.focus-label{color:var(--ink);font-weight:600}
+.focus-value{font-weight:800;color:var(--blue)}
+
+/* Report & Charts */
+.report-section{background:#fafbfc;border:1px solid var(--line);border-radius:12px;padding:20px}
+.report-section h4{margin:0 0 12px 0;font-size:14px;color:var(--ink);border-bottom:2px solid var(--gold);padding-bottom:8px;display:inline-block}
+.report-section ul{margin:8px 0;padding-right:20px}
+.report-section li{margin-bottom:6px;font-size:13px;color:#374151;line-height:1.8}
+.chart-box{position:relative;height:260px}
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 14px;border-radius:10px;font-size:12px;transition:all .2s}
+.btn:hover{background:#f8fafc}
+.btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap}
+.hidden{display:none !important}
+
+@media(max-width:900px){
+  .sidebar{width:70px}
+  .brand b,.brand small,.nav a span:not(.ico){display:none}
+  .main{margin-right:70px;width:calc(100% - 70px)}
+}
+</style>
 </head>
 <body>
-    <div class="layout">
-        <aside class="sidebar">
-            <h2>سامانه مدیریتی</h2>
-            <ul>
-                <li><a href="dashboard.html">داشبورد</a></li>
-                <li><a href="#">فروش</a></li>
-                <li><a href="#">مالی</a></li>
-                <li><a href="#" id="logoutBtn">خروج</a></li>
-            </ul>
-        </aside>
-
-        <main class="content">
-            <header>
-                <h1>داشبورد</h1>
-                <p id="welcomeText">خوش آمدید</p>
-            </header>
-
-            <div class="cards">
-                <div class="card">
-                    <h3>فروش امروز</h3>
-                    <p>—</p>
-                </div>
-                <div class="card">
-                    <h3>مطالبات</h3>
-                    <p>—</p>
-                </div>
-                <div class="card">
-                    <h3>سفارش معوق</h3>
-                    <p>—</p>
-                </div>
-                <div class="card">
-                    <h3>هشدارها</h3>
-                    <p>—</p>
-                </div>
-            </div>
-        </main>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">R</div>
+      <div><b>RAYAD</b><small>BUSINESS CONTROL</small></div>
     </div>
+    <nav class="nav">
+      <a href="dashboard.html" class="active"><span class="ico">⌂</span><span>داشبورد مدیرعامل</span></a>
+      <a href="finance.html"><span class="ico">₿</span><span>کنترل مالی</span></a>
+      <a href="transactions.html"><span class="ico">◈</span><span>مرکز تراکنش‌ها</span></a>
+      <a href="sales.html"><span class="ico">▣</span><span>فاکتورها</span></a>
+      <a href="inventory.html"><span class="ico">▤</span><span>انبار</span></a>
+      <a href="#" id="logoutBtn"><span class="ico">⏻</span><span>خروج</span></a>
+    </nav>
+  </aside>
 
-    <script src="js/dashboard.js"></script>
+  <main class="main">
+    <header class="topbar">
+      <div class="titleRow">
+        <h1>داشبورد مدیرعامل</h1>
+        <p>نمای کلی سلامت مالی و عملیاتی شرکت</p>
+      </div>
+      <div style="border:1px solid var(--line);background:#fff;padding:8px 14px;border-radius:12px;font-size:12px;display:flex;align-items:center;gap:8px;">
+        <span style="width:32px;height:32px;background:var(--bluebg);color:var(--blue);border-radius:50%;display:grid;place-items:center;font-weight:700;">م</span>
+        <span id="welcomeText">مدیر سیستم</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div id="errorText" class="hidden" style="background:var(--redbg);color:var(--red);padding:14px;border-radius:12px;margin-bottom:16px;border:1px solid #f8b4b8;font-size:13px;"></div>
+
+      <!-- KPI Cards (دقیقاً مطابق دمو Rayad) -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="icon">💳</div>
+          <div class="kpi-label">پرداخت‌های ثبت‌شده</div>
+          <div class="kpi-value" id="kpi-total-amount">-</div>
+          <div class="kpi-sub" id="kpi-total-tx-sub">در کل تراکنش‌ها</div>
+        </div>
+        <div class="kpi-card">
+          <div class="icon">⛔</div>
+          <div class="kpi-label">پرداخت متوقف‌شده</div>
+          <div class="kpi-value" id="kpi-stopped-count">-</div>
+          <div class="kpi-sub down">نیازمند تصمیم فوری</div>
+        </div>
+        <div class="kpi-card">
+          <div class="icon">⏱</div>
+          <div class="kpi-label">نیازمند بررسی</div>
+          <div class="kpi-value" id="kpi-pending-review">-</div>
+          <div class="kpi-sub down" id="kpi-high-risk-sub">مورد پرریسک</div>
+        </div>
+        <div class="kpi-card">
+          <div class="icon">🛡</div>
+          <div class="kpi-label">امتیاز سلامت کنترل</div>
+          <div class="kpi-value" id="kpi-health-score" style="color:var(--green)">-</div>
+          <div class="kpi-sub up">از ۱۰۰ امتیاز</div>
+        </div>
+      </div>
+
+      <!-- Two Column: AI Risk + Manager Focus -->
+      <div class="two-col">
+        <!-- AI Risk Center -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:20px;">🧠</span>
+              <h3 style="margin:0;font-size:15px;">ریسک امروز (AI Control Center)</h3>
+            </div>
+            <a href="transactions.html" style="font-size:12px;color:var(--blue);text-decoration:none;">مشاهده همه ←</a>
+          </div>
+          <div id="alertsList"></div>
+          <div id="alertsEmpty" class="hidden" style="text-align:center;padding:30px 10px;color:var(--muted);font-size:13px;">
+            ✅ هیچ مورد پرخطری یافت نشد. عالی است!
+          </div>
+        </div>
+
+        <!-- Manager Focus -->
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+            <span style="font-size:20px;">📌</span>
+            <h3 style="margin:0;font-size:15px;">تمرکز مدیر (اولویت‌ها)</h3>
+          </div>
+          <div class="focus-item">
+            <span class="focus-label">تراکنش‌های پرریسک</span>
+            <span class="focus-value" id="focus-high-risk" style="color:var(--red)">-</span>
+          </div>
+          <div class="focus-item">
+            <span class="focus-label">مغایرت‌های احتمالی (تکراری)</span>
+            <span class="focus-value" id="focus-duplicates">-</span>
+          </div>
+          <div class="focus-item">
+            <span class="focus-label">مبلغ در معرض ریسک</span>
+            <span class="focus-value" id="focus-at-risk">-</span>
+          </div>
+          <div class="focus-item">
+            <span class="focus-label">تراکنش‌های تأییدشده</span>
+            <span class="focus-value" id="focus-approved" style="color:var(--green)">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts & Report -->
+      <div class="two-col">
+        <div class="card">
+          <h3 style="margin:0 0 16px 0;font-size:15px;">📈 روند فروش ۷ روزه</h3>
+          <div class="chart-box"><canvas id="salesTrendChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="margin:0;font-size:15px;">📌 گزارش مدیریتی هوشمند</h3>
+            <div class="btn-group">
+              <button id="copyReportBtn" class="btn">📋 کپی</button>
+              <button id="printReportBtn" class="btn primary">🖨 چاپ</button>
+            </div>
+          </div>
+          <div id="reportBody" class="report-section">در حال بارگذاری...</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/dashboard.js"></script>
 </body>
 </html>

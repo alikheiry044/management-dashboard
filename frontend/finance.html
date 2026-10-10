@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>کنترل مالی | RAYAD</title>
+<style>
+:root{
+  --bg:#f3f5f8;--panel:#fff;--ink:#15202b;--muted:#6b7280;--line:#e5e7eb;
+  --navy:#111827;--gold:#c9a227;--gold2:#e3c45e;
+  --green:#15966f;--greenbg:#e8f7f1;--red:#d9343a;--redbg:#feecee;
+  --orange:#d97706;--orangebg:#fff4e3;--blue:#2563eb;--bluebg:#eaf1ff;
+  --shadow:0 8px 30px rgba(15,23,42,.06);--r:16px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Tahoma,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink)}
+button,select,input{font:inherit;cursor:pointer}
+.app{min-height:100vh;display:flex}
+.sidebar{width:260px;position:fixed;right:0;top:0;bottom:0;background:linear-gradient(180deg,var(--navy),#0c1320);color:#fff;padding:20px 15px;z-index:20}
+.brand{display:flex;align-items:center;gap:10px;padding:10px 12px 26px;border-bottom:1px solid rgba(255,255,255,.08)}
+.logo{width:42px;height:42px;border:1px solid rgba(227,196,94,.55);border-radius:13px;display:grid;place-items:center;color:var(--gold2);font-weight:900}
+.brand b{font-size:16px}.brand small{display:block;color:#aeb8c6;margin-top:3px;font-size:10px}
+.nav{padding-top:15px}
+.nav a{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;color:#cbd5e1;text-align:right;padding:12px;border-radius:11px;margin:3px 0;text-decoration:none;font-size:13px}
+.nav a:hover,.nav a.active{background:#263244;color:#fff}
+.nav a.active{box-shadow:inset -3px 0 0 var(--gold2)}
+.main{margin-right:260px;width:calc(100% - 260px);min-width:0}
+.topbar{height:70px;background:rgba(255,255,255,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px;position:sticky;top:0;z-index:10}
+.titleRow h1{margin:0;font-size:20px}
+.titleRow p{margin:4px 0 0;color:var(--muted);font-size:12px}
+.content{padding:24px 30px 40px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+
+/* Upload Panel */
+.upload-panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;margin-bottom:20px;box-shadow:var(--shadow)}
+.upload-head h3{margin:0 0 8px 0;font-size:16px}
+.upload-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:12px}
+.upload-row .field{display:flex;flex-direction:column;gap:6px}
+.upload-row label{font-size:12px;font-weight:700;color:var(--muted)}
+.upload-row select,.upload-row input[type="file"]{padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-family:inherit;background:#fff;font-size:13px}
+.upload-row select{width:200px}
+.upload-row input[type="file"]{flex:1;min-width:200px}
+.upload-result{margin-top:12px;font-size:13px;font-weight:bold;min-height:20px}
+
+/* Tabs */
+.tabs{display:flex;gap:8px;margin-bottom:16px;border-bottom:2px solid var(--line);padding-bottom:8px}
+.tab{background:#f3f4f6;border:none;padding:10px 18px;border-radius:10px 10px 0 0;cursor:pointer;font-family:inherit;font-weight:700;color:var(--muted);font-size:13px;transition:all .2s}
+.tab:hover{background:#e5e7eb}
+.tab.active{background:var(--navy);color:#fff}
+
+/* Table */
+.table-container{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{color:#7a8491;text-align:right;font-weight:700;padding:14px 16px;border-bottom:1px solid var(--line);background:#f9fafb}
+.data-table td{padding:14px 16px;border-bottom:1px solid #eef0f3;vertical-align:middle}
+.data-table tr:hover td{background:#fafbfd}
+
+/* Badges */
+.badge{display:inline-flex;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800}
+.bBlue{background:var(--bluebg);color:#1d4ed8}
+.bOrange{background:var(--orangebg);color:#a45100}
+.bRed{background:var(--redbg);color:#b4232a}
+.bGreen{background:var(--greenbg);color:#107a5a}
+.bGray{background:#f1f3f5;color:#5b6470}
+
+/* Buttons */
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:9px 16px;border-radius:10px;font-size:13px;font-weight:600;transition:all .2s}
+.btn:hover{background:#f8fafc}
+.btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn.primary:hover{background:#1f2937}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+
+@media(max-width:900px){
+  .sidebar{width:70px}
+  .brand b,.brand small,.nav a span:not(.ico){display:none}
+  .main{margin-right:70px;width:calc(100% - 70px)}
+  .upload-row{flex-direction:column;align-items:stretch}
+  .upload-row select{width:100%}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">R</div>
+      <div><b>RAYAD</b><small>BUSINESS CONTROL</small></div>
+    </div>
+    <nav class="nav">
+      <a href="dashboard.html"><span class="ico">⌂</span><span>داشبورد مدیرعامل</span></a>
+      <a href="finance.html" class="active"><span class="ico">₿</span><span>کنترل مالی</span></a>
+      <a href="transactions.html"><span class="ico">◈</span><span>مرکز تراکنش‌ها</span></a>
+      <a href="sales.html"><span class="ico"></span><span>کنترل فاکتورها</span></a>
+      <a href="suppliers.html"><span class="ico"></span><span>تأمین‌کنندگان</span></a>
+      <a href="inventory.html"><span class="ico">▤</span><span>مدیریت انبار</span></a>
+      <a href="banking.html"><span class="ico">🏦</span><span>عملیات بانکی</span></a>
+      <a href="tasks.html"><span class="ico">✓</span><span>کنترل عملکرد</span></a>
+      <a href="reports.html"><span class="ico">▥</span><span>گزارش‌ها</span></a>
+      <a href="smart-upload.html"><span class="ico">✨</span><span>آپلود هوشمند</span></a>
+      <a href="#" id="logoutBtn"><span class="ico">⏻</span><span>خروج</span></a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="titleRow">
+        <h1>کنترل مالی</h1>
+        <p>تطبیق، تأیید و کنترل چرخه پرداخت با موتور ریسک هوشمند</p>
+      </div>
+      <div style="border:1px solid var(--line);background:#fff;padding:8px 14px;border-radius:12px;font-size:12px;display:flex;align-items:center;gap:8px;">
+        <span style="width:32px;height:32px;background:var(--bluebg);color:var(--blue);border-radius:50%;display:grid;place-items:center;font-weight:700;">م</span>
+        <span id="welcomeText">مدیر سیستم</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- Upload Panel -->
+      <section class="upload-panel" id="uploadPanel">
+        <div class="upload-head">
+          <h3>📤 آپلود و به‌روزرسانی داده‌های مالی</h3>
+          <small style="color:var(--muted);">فایل اکسل را انتخاب کنید. موتور ریسک به صورت خودکار داده‌ها را تحلیل و امتیازدهی می‌کند.</small>
+        </div>
+        <div class="upload-row">
+          <div class="field">
+            <label for="uploadType">نوع فایل</label>
+            <select id="uploadType">
+              <option value="receivable">مطالبات (دریافتنی)</option>
+              <option value="payable">بدهی‌ها (بستانکاری)</option>
+              <option value="expense">گزارش هزینه</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1;">
+            <label for="uploadFile">انتخاب فایل اکسل</label>
+            <input type="file" id="uploadFile" accept=".xlsx,.xls,.csv">
+          </div>
+          <button type="button" id="uploadBtn" class="btn primary">آپلود و پردازش</button>
+        </div>
+        <p id="uploadResult" class="upload-result" role="status"></p>
+      </section>
+
+      <!-- Tabs -->
+      <nav id="financeTabs" class="tabs" aria-label="نوع تراکنش"></nav>
+      <p id="financeSummary" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></p>
+
+      <!-- Table -->
+      <section class="table-container">
+        <table id="financeTable" class="data-table">
+          <thead>
+            <tr>
+              <th>نوع</th>
+              <th>طرف حساب</th>
+              <th>مبلغ</th>
+              <th>ریسک</th>
+              <th>توضیحات</th>
+            </tr>
+          </thead>
+          <tbody id="financeBody">
+            <!-- داده‌ها توسط JavaScript قرار می‌گیرند -->
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- در بخش upload-panel در finance.html -->
+<div class="upload-head">
+  <h3>📤 آپلود سریع داده‌های مالی</h3>
+  <small style="color:var(--muted);">
+    برای فایل‌های استاندارد سپیدار/همکاران.
+    <a href="smart-upload.html" style="color:var(--blue);text-decoration:none;">
+      فایل ناشناس دارید؟ → آپلود هوشمند
+    </a>
+  </small>
+</div>
+
+
+<script src="js/api.js"></script>
+<script src="js/upload.js"></script>
+<script src="js/finance.js"></script>
+</body>
+</html>

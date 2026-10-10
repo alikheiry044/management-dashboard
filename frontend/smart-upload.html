@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>آپلود هوشمند | RAYAD</title>
+<style>
+:root{
+  --bg:#f3f5f8;--panel:#fff;--ink:#15202b;--muted:#6b7280;--line:#e5e7eb;
+  --navy:#111827;--gold:#c9a227;--gold2:#e3c45e;
+  --green:#15966f;--greenbg:#e8f7f1;--red:#d9343a;--redbg:#feecee;
+  --orange:#d97706;--orangebg:#fff4e3;--blue:#2563eb;--bluebg:#eaf1ff;
+  --shadow:0 8px 30px rgba(15,23,42,.06);--r:16px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Tahoma,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink)}
+button,select,input{font:inherit;cursor:pointer}
+.app{min-height:100vh;display:flex}
+.sidebar{width:260px;position:fixed;right:0;top:0;bottom:0;background:linear-gradient(180deg,var(--navy),#0c1320);color:#fff;padding:20px 15px;z-index:20}
+.brand{display:flex;align-items:center;gap:10px;padding:10px 12px 26px;border-bottom:1px solid rgba(255,255,255,.08)}
+.logo{width:42px;height:42px;border:1px solid rgba(227,196,94,.55);border-radius:13px;display:grid;place-items:center;color:var(--gold2);font-weight:900}
+.brand b{font-size:16px}.brand small{display:block;color:#aeb8c6;margin-top:3px;font-size:10px}
+.nav{padding-top:15px}
+.nav a{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;color:#cbd5e1;text-align:right;padding:12px;border-radius:11px;margin:3px 0;text-decoration:none;font-size:13px}
+.nav a:hover,.nav a.active{background:#263244;color:#fff}
+.nav a.active{box-shadow:inset -3px 0 0 var(--gold2)}
+.main{margin-right:260px;width:calc(100% - 260px);min-width:0}
+.topbar{height:70px;background:rgba(255,255,255,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px;position:sticky;top:0;z-index:10}
+.titleRow h1{margin:0;font-size:20px}
+.titleRow p{margin:4px 0 0;color:var(--muted);font-size:12px}
+.content{padding:24px 30px 40px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+
+/* Steps */
+.steps{display:flex;gap:12px;margin-bottom:24px}
+.step{flex:1;padding:14px;background:#fff;border:1px solid var(--line);border-radius:12px;text-align:center;font-size:13px;color:var(--muted);transition:all .2s}
+.step.active{background:var(--bluebg);color:var(--blue);border-color:var(--blue);font-weight:700}
+.step.completed{background:var(--greenbg);color:var(--green);border-color:var(--green)}
+
+/* Upload Area */
+.upload-area{border:2px dashed var(--line);border-radius:var(--r);padding:50px 30px;text-align:center;background:#fafbfc;transition:all .2s;cursor:pointer}
+.upload-area:hover{border-color:var(--blue);background:var(--bluebg)}
+.upload-area.dragover{border-color:var(--gold);background:var(--orangebg);transform:scale(1.01)}
+.upload-icon{font-size:56px;margin-bottom:16px;opacity:.6}
+.upload-text{font-size:16px;color:var(--ink);margin-bottom:8px;font-weight:600}
+.upload-hint{font-size:12px;color:var(--muted)}
+
+/* Form */
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:13px;font-weight:700;margin-bottom:8px;color:var(--ink)}
+.form-control{width:100%;padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-size:13px;background:#fff;font-family:inherit}
+.form-control:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+
+/* Buttons */
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;transition:all .2s}
+.btn:hover{background:#f8fafc}
+.btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn.primary:hover{background:#1f2937}
+.btn.success{background:var(--green);color:#fff;border-color:var(--green)}
+.btn.success:hover{background:#127a5a}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* Mapping Table */
+.mapping-table{width:100%;border-collapse:collapse;margin-top:16px}
+.mapping-table th{background:#f9fafb;padding:12px;text-align:right;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);font-weight:700}
+.mapping-table td{padding:12px;border-bottom:1px solid var(--line);font-size:13px}
+.mapping-table tr:hover td{background:#fafbfd}
+.confidence{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700}
+.confidence.high{background:var(--greenbg);color:var(--green)}
+.confidence.medium{background:var(--orangebg);color:var(--orange)}
+.confidence.low{background:var(--redbg);color:var(--red)}
+
+/* Preview Table */
+.preview-wrapper{overflow-x:auto;margin-top:16px}
+.preview-table{width:100%;border-collapse:collapse;font-size:12px}
+.preview-table th{background:#f9fafb;padding:10px;text-align:right;font-size:11px;color:var(--muted);border-bottom:1px solid var(--line);font-weight:700}
+.preview-table td{padding:10px;border-bottom:1px solid var(--line);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Alerts */
+.alert{padding:14px 18px;border-radius:12px;margin-bottom:16px;font-size:13px;display:flex;align-items:center;gap:10px}
+.alert-warning{background:var(--orangebg);color:var(--orange);border:1px solid #f6d7a6}
+.alert-success{background:var(--greenbg);color:var(--green);border:1px solid #bfeadd}
+.alert-error{background:var(--redbg);color:var(--red);border:1px solid #fac9ce}
+
+/* Success Section */
+.success-box{text-align:center;padding:60px 30px}
+.success-icon{font-size:80px;margin-bottom:20px}
+.success-title{font-size:22px;color:var(--green);margin-bottom:12px;font-weight:800}
+.success-message{font-size:14px;color:var(--muted);margin-bottom:30px}
+
+.hidden{display:none !important}
+
+@media(max-width:900px){
+  .sidebar{width:70px}
+  .brand b,.brand small,.nav a span:not(.ico){display:none}
+  .main{margin-right:70px;width:calc(100% - 70px)}
+  .steps{flex-direction:column}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">R</div>
+      <div><b>RAYAD</b><small>BUSINESS CONTROL</small></div>
+    </div>
+    <nav class="nav">
+      <a href="dashboard.html"><span class="ico">⌂</span><span>داشبورد مدیرعامل</span></a>
+      <a href="finance.html"><span class="ico">₿</span><span>کنترل مالی</span></a>
+      <a href="transactions.html"><span class="ico">◈</span><span>مرکز تراکنش‌ها</span></a>
+      <a href="sales.html"><span class="ico">▣</span><span>کنترل فاکتورها</span></a>
+      <a href="suppliers.html"><span class="ico"></span><span>تأمین‌کنندگان</span></a>
+      <a href="inventory.html"><span class="ico">▤</span><span>مدیریت انبار</span></a>
+      <a href="banking.html"><span class="ico">🏦</span><span>عملیات بانکی</span></a>
+      <a href="tasks.html"><span class="ico">✓</span><span>کنترل عملکرد</span></a>
+      <a href="reports.html"><span class="ico">▥</span><span>گزارش‌ها</span></a>
+      <a href="smart-upload.html" class="active"><span class="ico">✨</span><span>آپلود هوشمند</span></a>
+      <a href="#" id="logoutBtn"><span class="ico">⏻</span><span>خروج</span></a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="titleRow">
+        <h1>آپلود هوشمند فایل اکسل</h1>
+        <p>سیستم به صورت خودکار ستون‌های فایل شما را تشخیص می‌دهد</p>
+      </div>
+      <div style="border:1px solid var(--line);background:#fff;padding:8px 14px;border-radius:12px;font-size:12px;display:flex;align-items:center;gap:8px;">
+        <span style="width:32px;height:32px;background:var(--bluebg);color:var(--blue);border-radius:50%;display:grid;place-items:center;font-weight:700;">م</span>
+        <span id="welcomeText">مدیر سیستم</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- Steps Indicator -->
+      <div class="steps">
+        <div class="step active" id="step1">۱. انتخاب فایل</div>
+        <div class="step" id="step2">۲. بررسی تشخیص</div>
+        <div class="step" id="step3">۳. تأیید و import</div>
+      </div>
+
+      <!-- Step 1: Upload -->
+      <div id="uploadSection" class="card">
+        <h3 style="margin:0 0 8px 0;font-size:16px;">📁 انتخاب فایل اکسل</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">
+          فایل اکسل خود را بکشید و رها کنید یا کلیک کنید. سیستم به صورت هوشمند ستون‌ها را تشخیص می‌دهد.
+        </p>
+
+        <div class="upload-area" id="uploadArea">
+          <div class="upload-icon">📤</div>
+          <div class="upload-text">فایل اکسل را اینجا بکشید یا کلیک کنید</div>
+          <div class="upload-hint">فرمت‌های مجاز: .xlsx, .xls, .csv — حداکثر ۲۰ مگابایت</div>
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none">
+        </div>
+
+        <div class="form-group" style="margin-top:20px;">
+          <label for="fileType">نوع داده (اختیاری — برای دقت بیشتر)</label>
+          <select id="fileType" class="form-control">
+            <option value="auto">🔍 تشخیص خودکار</option>
+            <option value="receivable">مطالبات (دریافتنی)</option>
+            <option value="payable">بدهی‌ها (پرداختنی)</option>
+            <option value="expense">هزینه‌ها</option>
+            <option value="sales">فروش / فاکتورها</option>
+            <option value="inventory">موجودی انبار</option>
+            <option value="suppliers">تأمین‌کنندگان</option>
+          </select>
+        </div>
+
+        <button class="btn primary" id="previewBtn" disabled style="width:100%;margin-top:16px;padding:14px;font-size:14px;">
+          🔍 بررسی و پیش‌نمایش
+        </button>
+      </div>
+
+      <!-- Step 2: Preview & Mapping -->
+      <div id="previewSection" class="hidden">
+        <div id="warningsBox"></div>
+
+        <div class="card">
+          <h3 style="margin:0 0 8px 0;font-size:16px;">🎯 ستون‌های تشخیص داده شده</h3>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+            سیستم این ستون‌ها را تشخیص داده است. در صورت نیاز می‌توانید از منوی کشویی تغییر دهید.
+          </p>
+
+          <div style="overflow-x:auto;">
+            <table class="mapping-table">
+              <thead>
+                <tr>
+                  <th style="width:25%">فیلد سیستم</th>
+                  <th style="width:35%">ستون فایل شما</th>
+                  <th style="width:15%">امتیاز اطمینان</th>
+                  <th style="width:25%">تغییر دستی</th>
+                </tr>
+              </thead>
+              <tbody id="mappingBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 8px 0;font-size:16px;"> پیش‌نمایش داده‌ها (۱ ردیف اول)</h3>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+            این داده‌ها قبل از import نهایی نمایش داده می‌شوند.
+          </p>
+          <div class="preview-wrapper">
+            <table class="preview-table" id="previewTable"></table>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin-top:16px;">
+            📊 تعداد کل ردیف‌ها: <strong id="totalRows" style="color:var(--ink);">0</strong>
+          </p>
+        </div>
+
+        <div style="display:flex;gap:12px;">
+          <button class="btn" id="backBtn" style="flex:1;">← بازگشت و انتخاب فایل دیگر</button>
+          <button class="btn success" id="confirmBtn" style="flex:2;padding:14px;font-size:14px;">✅ تأیید و import نهایی</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Success -->
+      <div id="successSection" class="hidden">
+        <div class="card success-box">
+          <div class="success-icon">✅</div>
+          <div class="success-title">import با موفقیت انجام شد!</div>
+          <div class="success-message" id="successMessage"></div>
+          <div style="display:flex;gap:12px;justify-content:center;">
+            <button class="btn primary" onclick="location.reload()"> آپلود فایل جدید</button>
+            <button class="btn" onclick="window.location.href='finance.html'">📊 مشاهده در کنترل مالی</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/smart-upload.js"></script>
+</body>
+</html>

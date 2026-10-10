@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>آپلود اطلاعات</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <h2>سامانه مدیریتی</h2>
+        <ul>
+            <li><a href="dashboard.html">داشبورد</a></li>
+            <li><a href="sales.html">فروش</a></li>
+            <li><a href="finance.html">مالی</a></li>
+            <li><a href="inventory.html">انبار</a></li>
+            <li><a href="upload.html" class="active">آپلود</a></li>
+            <li><a href="transactions.html">تراکنش‌ها</a></li>
+            <li><a href="#" id="logoutBtn">خروج</a></li>
+        </ul>
+    </aside>
+
+    <main class="content">
+        <header>
+            <h1>آپلود و به‌روزرسانی داده‌ها</h1>
+            <p>فایل‌های مربوط به فروش، مالی یا انبار را برای به‌روزرسانی سامانه ارسال کنید.</p>
+        </header>
+
+        <section class="cards">
+            <div class="card">
+                <h3>بارگذاری فایل فروش/مالی</h3>
+                <small>فرمت‌های مجاز: XLSX, CSV (حداکثر ۱۰ مگابایت)</small>
+                <form id="uploadForm">
+                    <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" required>
+                    <button type="submit" id="uploadBtn">ارسال و پردازش فایل</button>
+                </form>
+                <p id="uploadStatus" class="error" style="display: none;"></p>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/upload.js"></script>
+</body>
+</html>

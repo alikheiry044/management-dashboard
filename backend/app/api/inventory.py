@@ -1,102 +1,118 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from decimal import Decimal
 import pandas as pd
-from io import BytesIO
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.models.user import User
 from app.models.inventory import InventoryItem
-from app.api.upload import normalize_persian, read_ms_xml_spreadsheet, clean_amount
+# Shared helpers live in upload.py (see the updated version)
+from app.api.upload import read_uploaded_table, is_total_row, clean_amount, add_snapshot
+from app.models.user import User
 
-router = APIRouter(prefix="/inventory", tags=["Inventory"])
+# Every route in this router requires a valid token (upload included)
+router = APIRouter(
+    prefix="/inventory",
+    tags=["Inventory"],
+    dependencies=[Depends(get_current_user)],
+)
+
+
+def _normalize_code(value) -> str:
+    """Excel numeric codes often arrive as floats: 1101.0 -> "1101"."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
 
 
 @router.post("/upload")
 async def upload_inventory(
     file: UploadFile = File(...),
+    replace: bool = Query(True, description="حذف موجودی قبلی قبل از ثبت فایل جدید"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="فایل ارسال نشده است")
-
-    filename = file.filename.lower()
-    if not filename.endswith((".xlsx", ".xls", ".csv")):
-        raise HTTPException(status_code=400, detail="فقط فایل Excel یا CSV مجاز است")
-
-    content = await file.read()
-
-    try:
-        if filename.endswith(".csv"):
-            df = pd.read_csv(BytesIO(content))
-        else:
-            try:
-                df = pd.read_excel(BytesIO(content), engine="calamine")
-            except Exception:
-                try:
-                    df = read_ms_xml_spreadsheet(content)
-                except Exception:
-                    tables = pd.read_html(BytesIO(content))
-                    if not tables:
-                        raise ValueError("جدولی در فایل پیدا نشد")
-                    df = tables[0]
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"خواندن فایل ناموفق بود: {str(e)}")
-
-    df.columns = [normalize_persian(str(c).strip()) for c in df.columns]
+    df = await read_uploaded_table(file)
 
     column_map = {
         "کد کالا": "code",
         "عنوان کالا": "title",
         "موجودی": "quantity",
     }
-    rename_dict = {col: column_map[col] for col in df.columns if col in column_map}
-    df = df.rename(columns=rename_dict)
+    df = df.rename(columns={c: column_map[c] for c in df.columns if c in column_map})
 
-    required_cols = ["code", "title", "quantity"]
-    missing = [c for c in required_cols if c not in df.columns]
+    missing = [c for c in ("code", "title", "quantity") if c not in df.columns]
     if missing:
         raise HTTPException(
             status_code=400,
-            detail=f"ستون‌های ضروری یافت نشد: {missing}. ستون‌های فایل: {list(df.columns)}"
+            detail=f"ستون‌های ضروری یافت نشد: {missing}. ستون‌های فایل: {list(df.columns)}",
         )
 
-    created = 0
+    items = []
     errors = []
+    skipped_totals = 0
+    negative_quantity = 0
 
     for idx, row in df.iterrows():
         try:
             code = row.get("code")
             title = row.get("title")
-            if pd.isna(code) or str(code).strip() == "" or pd.isna(title):
+            if pd.isna(code) or pd.isna(title):
                 continue
 
-            item = InventoryItem(
-                code=str(code).strip(),
-                title=str(title).strip(),
-                quantity=clean_amount(row.get("quantity")),
+            code_text = _normalize_code(code)
+            title_text = str(title).strip()
+            if not code_text or not title_text:
+                continue
+
+            if is_total_row(title_text) or is_total_row(code_text):
+                skipped_totals += 1
+                continue
+
+            quantity = clean_amount(row.get("quantity"))
+            if quantity < 0:
+                negative_quantity += 1  # kept, but reported: usually a bookkeeping problem
+
+            items.append(
+                InventoryItem(code=code_text, title=title_text, quantity=quantity)
             )
-            db.add(item)
-            created += 1
         except Exception as e:
             errors.append(f"ردیف {idx + 2}: {str(e)}")
 
+    # Never wipe existing data when the file produced nothing usable
+    if not items:
+        raise HTTPException(
+            status_code=400,
+            detail="هیچ ردیف معتبری در فایل پیدا نشد؛ داده‌های قبلی تغییری نکرد.",
+        )
+
+    if replace:
+        await db.execute(delete(InventoryItem))
+
+    db.add_all(items)
+    add_snapshot(
+        db,
+        report_type="inventory",
+        total=None,
+        row_count=len(items),
+        filename=file.filename,
+        mode="replace" if replace else "append",
+        user=current_user,
+    )
     await db.commit()
 
     return {
         "message": "آپلود موجودی انبار انجام شد",
-        "created": created,
+        "created": len(items),
+        "skipped_totals": skipped_totals,
+        "negative_quantity": negative_quantity,
+        "replaced_previous": replace,
         "errors": errors[:30],
     }
 
 
 @router.get("/")
-async def list_inventory(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+async def list_inventory(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(InventoryItem).order_by(InventoryItem.title))
     items = result.scalars().all()
     return [

@@ -1,10 +1,78 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fa" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حساب‌های بانکی</title>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-$END$
+<div class="layout">
+    <aside class="sidebar">
+        <h2>سامانه مدیریتی</h2>
+        <ul>
+            <li><a href="dashboard.html">داشبورد</a></li>
+            <li><a href="sales.html">فروش</a></li>
+            <li><a href="finance.html">مالی</a></li>
+            <li><a href="banks.html" class="active">بانک</a></li>
+            <li><a href="inventory.html">انبار</a></li>
+            <li><a href="#" id="logoutBtn">خروج</a></li>
+        </ul>
+    </aside>
+
+    <main class="content">
+        <header>
+            <h1>حساب‌های بانکی</h1>
+            <p id="message">در حال دریافت اطلاعات...</p>
+        </header>
+
+        <!-- آپلود گزارش «مرور بانک‌ها (دریافت و پرداخت)» -->
+        <section class="card upload-panel" id="uploadPanel" data-kind="bank">
+            <div class="upload-head">
+                <h3>آپلود و به‌روزرسانی گزارش بانک‌ها</h3>
+                <small>فایل «مرور بانک‌ها (دریافت و پرداخت)» — هر آپلود جایگزین گزارش قبلی می‌شود.</small>
+            </div>
+            <div class="upload-row">
+                <input type="file" id="uploadFile" accept=".xlsx,.xls">
+                <button type="button" id="uploadBtn">آپلود گزارش بانک‌ها</button>
+            </div>
+            <p id="uploadResult" class="upload-result" role="status"></p>
+        </section>
+
+        <!-- خلاصه -->
+        <section class="cards" id="bankCards" style="display:none;">
+            <div class="card"><h3>تعداد حساب‌ها</h3><p id="kpiCount">—</p></div>
+            <div class="card"><h3>جمع دریافت‌ها</h3><p id="kpiReceipts">—</p></div>
+            <div class="card"><h3>جمع پرداخت‌ها</h3><p id="kpiPayments">—</p></div>
+            <div class="card"><h3>جمع مانده</h3><p id="kpiBalance">—</p></div>
+        </section>
+
+        <div class="toolbar">
+            <input type="search" id="searchInput" placeholder="جستجوی کد، عنوان یا شماره حساب...">
+            <span id="countText" class="table-summary"></span>
+        </div>
+
+        <section class="table-container">
+            <table id="bankTable" class="data-table">
+                <thead>
+                    <tr>
+                        <th>کد</th>
+                        <th>عنوان حساب</th>
+                        <th>شماره حساب</th>
+                        <th>اول دوره</th>
+                        <th>دریافت‌ها</th>
+                        <th>پرداخت‌ها</th>
+                        <th>مانده</th>
+                    </tr>
+                </thead>
+                <tbody id="bankBody"></tbody>
+            </table>
+        </section>
+    </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/uploader.js"></script>
+<script src="js/banks.js"></script>
 </body>
 </html>

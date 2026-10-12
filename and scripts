@@ -1,0 +1,22 @@
+ frontend/Inventory.html     | 202 [32m+++++[m[31m-----[m
+ frontend/banks.html         |  78 [32m+++[m[31m-[m
+ frontend/css/style.css      | 869 [32m+++++++++++++++++++++++++++++++[m[31m-------------[m
+ frontend/dashboard.html     | 276 [32m+++++[m[31m---------[m
+ frontend/finance.html       | 226 [32m+++[m[31m---------[m
+ frontend/index.html         |  25 [32m+[m[31m-[m
+ frontend/js/Upload.js       |  82 [32m+++++[m
+ frontend/js/api.js          |  71 [32m+++[m[31m-[m
+ frontend/js/auth.js         |  15 [32m+[m[31m-[m
+ frontend/js/banks.js        | 125 [32m+++++++[m
+ frontend/js/dashboard.js    | 428 [32m++++++++++++[m[31m----------[m
+ frontend/js/finance.js      | 329 [32m++++++++++[m[31m-------[m
+ frontend/js/inventory.js    | 430 [32m++++++++++++++++[m[31m------[m
+ frontend/js/sales.js        | 226 [32m++++++[m[31m------[m
+ frontend/js/smart-upload.js | 605 [32m+++++++++++++++[m[31m---------------[m
+ frontend/js/suppliers.js    | 144 [32m++++++++[m
+ frontend/js/transactions.js | 200 [32m++++++[m[31m----[m
+ frontend/js/uploader.js     | 234 [32m+++++++[m[31m-----[m
+ frontend/sales.html         | 283 [32m+++++++[m[31m--------[m
+ frontend/suppliers.html     | 139 [32m++++[m[31m---[m
+ frontend/upload.html        |   2 [32m+[m[31m-[m
+ 21 files changed, 3024 insertions(+), 1965 deletions(-)

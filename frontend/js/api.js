@@ -1,7 +1,14 @@
-const API_URL = "http://127.0.0.1:8000";
+// آدرس Backend: همان hostname صفحه‌ی فعلی را استفاده می‌کند تا localhost و 127.0.0.1
+// دچار مشکل CORS نشوند. اگر صفحه با file:// باز شده باشد، 127.0.0.1 استفاده می‌شود.
+// هنگام دیپلوی فقط همین یک خط را عوض کن.
+const API_URL = `http://${window.location.hostname || "127.0.0.1"}:8000`;
 
 // Currency unit shown on dashboard cards and table headers (change here only)
 const CURRENCY_LABEL = "ریال";
+
+// زمان انتظار پیش‌فرض (میلی‌ثانیه)
+const REQUEST_TIMEOUT = 30000;
+const UPLOAD_TIMEOUT = 120000;
 
 function getToken() {
     return localStorage.getItem("access_token");
@@ -16,16 +23,21 @@ function getUser() {
     }
 }
 
+// مقدار true/false برمی‌گرداند. در بالای هر صفحه‌ی محافظت‌شده این‌طور استفاده کن:
+//   if (!requireLogin()) throw new Error("not authenticated");
+// تا بقیه‌ی کد صفحه بدون توکن اجرا نشود.
 function requireLogin() {
     if (!getToken() || !getUser()) {
-        window.location.href = "index.html";
+        window.location.replace("index.html");
+        return false;
     }
+    return true;
 }
 
 function logout() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("user");
-    window.location.href = "index.html";
+    window.location.replace("index.html");
 }
 
 // Turns FastAPI's `detail` (string or 422 array) into a readable message
@@ -38,25 +50,38 @@ function extractError(data, fallback) {
     return fallback;
 }
 
-// Shared request helper: auth header, 401 handling, safe JSON parsing, readable errors
+// fetch با timeout؛ اگر سرور جواب ندهد درخواست قطع می‌شود
+async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+// Shared request helper: auth header, timeout, 401 handling, safe JSON parsing, readable errors
 async function apiRequest(path, options = {}, fallbackError = "درخواست ناموفق بود") {
-    let response;
+    const { timeout, ...fetchOptions } = options;
     const token = getToken();
 
-    const headers = {
-        ...(options.headers || {}),
-    };
-
+    const headers = { ...(fetchOptions.headers || {}) };
     if (token) {
         headers["Authorization"] = `Bearer ${token}`;
     }
 
+    let response;
     try {
-        response = await fetch(`${API_URL}${path}`, {
-            ...options,
-            headers,
-        });
-    } catch {
+        response = await fetchWithTimeout(
+            `${API_URL}${path}`,
+            { ...fetchOptions, headers },
+            timeout || REQUEST_TIMEOUT
+        );
+    } catch (err) {
+        if (err && err.name === "AbortError") {
+            throw new Error("سرور پاسخ نداد. دوباره تلاش کنید.");
+        }
         throw new Error("اتصال به سرور برقرار نشد. مطمئن شوید Backend روشن است.");
     }
 
@@ -69,7 +94,7 @@ async function apiRequest(path, options = {}, fallbackError = "درخواست ن
     try {
         data = await response.json();
     } catch {
-        // non-JSON body (e.g. HTML error page)
+        // non-JSON body (e.g. HTML error page or 204 No Content)
     }
 
     if (!response.ok) {
@@ -94,7 +119,11 @@ async function apiUpload(path, file) {
     const formData = new FormData();
     formData.append("file", file);
     // Do not set Content-Type: the browser adds the multipart boundary itself
-    return apiRequest(path, { method: "POST", body: formData }, "آپلود ناموفق بود");
+    return apiRequest(
+        path,
+        { method: "POST", body: formData, timeout: UPLOAD_TIMEOUT },
+        "آپلود ناموفق بود"
+    );
 }
 
 function toPersianDigits(text) {
@@ -127,10 +156,12 @@ if (typeof document !== "undefined" && document.addEventListener) {
             el.textContent = CURRENCY_LABEL;
         });
 
-        const current = window.location.pathname.split("/").pop() || "index.html";
+        // فقط اسم فایل، بدون مسیر / query / hash
+        const fileName = (p) => (p || "").split(/[?#]/)[0].split("/").pop();
+        const current = fileName(window.location.pathname) || "index.html";
+
         document.querySelectorAll(".sidebar a").forEach(function (a) {
-            const href = a.getAttribute("href");
-            if (href === current) {
+            if (fileName(a.getAttribute("href")) === current) {
                 a.classList.add("active");
             }
         });

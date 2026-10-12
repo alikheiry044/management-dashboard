@@ -11,15 +11,21 @@ const loginErrorBox = document.getElementById("errorMessage");
 // ظاهر پیام خطا از کلاس .error در style.css می‌آید (پس‌زمینه‌ی قرمز ملایم)
 if (loginErrorBox) loginErrorBox.setAttribute("role", "alert");
 
+// پیام خطا هم با باکس Tailwind صفحه‌ی ورود (div با class="hidden" و <span> داخلش) کار می‌کند
+// و هم با <p class="error"> ساده؛ آیکون باکس خراب نمی‌شود.
 function showLoginError(element, message) {
     if (!element) return;
-    element.textContent = message;
-    element.style.display = "block";
+    const target = element.querySelector("span") || element;
+    target.textContent = message;
+    element.classList.remove("hidden");
+    element.style.display = element.classList.contains("flex") ? "flex" : "block";
 }
 
 function hideLoginError(element) {
     if (!element) return;
-    element.textContent = "";
+    const target = element.querySelector("span") || element;
+    target.textContent = "";
+    element.classList.add("hidden");
     element.style.display = "none";
 }
 
@@ -107,3 +113,4 @@ loginForm?.addEventListener("submit", async function (e) {
         submitBtn.textContent = originalBtnText;
     }
 });
+

@@ -3,63 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>مدیریت انبار | RAYAD</title>
+<title>موجودی انبار | RAYAD</title>
 <style>
 :root{
   --bg:#f3f5f8;--panel:#fff;--ink:#15202b;--muted:#6b7280;--line:#e5e7eb;
-  --navy:#111827;--gold:#c9a227;--gold2:#e3c45e;
-  --green:#15966f;--greenbg:#e8f7f1;--red:#d9343a;--redbg:#feecee;
-  --orange:#d97706;--orangebg:#fff4e3;--blue:#2563eb;--bluebg:#eaf1ff;
-  --shadow:0 8px 30px rgba(15,23,42,.06);--r:16px;
+  --navy:#111827;--gold2:#e3c45e;--green:#15966f;--greenbg:#e8f7f1;
+  --red:#d9343a;--redbg:#feecee;--orange:#d97706;--orangebg:#fff4e3;
+  --blue:#2563eb;--bluebg:#eaf1ff;--shadow:0 8px 30px rgba(15,23,42,.06);--r:16px;
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:Tahoma,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink)}
-button,select{font:inherit;cursor:pointer}
+button,input{font:inherit}button{cursor:pointer}
 .app{min-height:100vh;display:flex}
 .sidebar{width:260px;position:fixed;right:0;top:0;bottom:0;background:linear-gradient(180deg,var(--navy),#0c1320);color:#fff;padding:20px 15px;z-index:20}
 .brand{display:flex;align-items:center;gap:10px;padding:10px 12px 26px;border-bottom:1px solid rgba(255,255,255,.08)}
 .logo{width:42px;height:42px;border:1px solid rgba(227,196,94,.55);border-radius:13px;display:grid;place-items:center;color:var(--gold2);font-weight:900}
 .brand b{font-size:16px}.brand small{display:block;color:#aeb8c6;margin-top:3px;font-size:10px}
 .nav{padding-top:15px}
-.nav a{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;color:#cbd5e1;text-align:right;padding:12px;border-radius:11px;margin:3px 0;text-decoration:none;font-size:13px}
+.nav a{display:flex;align-items:center;gap:10px;width:100%;color:#cbd5e1;padding:12px;border-radius:11px;margin:3px 0;text-decoration:none;font-size:13px}
 .nav a:hover,.nav a.active{background:#263244;color:#fff}
 .nav a.active{box-shadow:inset -3px 0 0 var(--gold2)}
 .main{margin-right:260px;width:calc(100% - 260px);min-width:0}
-.topbar{height:70px;background:rgba(255,255,255,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px;position:sticky;top:0;z-index:10}
+.topbar{height:70px;background:rgba(255,255,255,.95);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px;position:sticky;top:0;z-index:10}
 .titleRow h1{margin:0;font-size:20px}
 .titleRow p{margin:4px 0 0;color:var(--muted);font-size:12px}
 .content{padding:24px 30px 40px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
-
-/* KPI Grid */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px}
-.kpi-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;box-shadow:var(--shadow);position:relative}
-.kpi-card .icon{position:absolute;left:20px;top:20px;font-size:24px;opacity:.2}
-.kpi-label{font-size:12px;color:var(--muted);margin-bottom:8px}
-.kpi-value{font-size:22px;font-weight:900;color:var(--ink)}
-.kpi-sub{font-size:11px;color:var(--muted);margin-top:4px}
-
-/* Layout */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
-@media(max-width:900px){.two-col{grid-template-columns:1fr}}
-
-/* Table */
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:18px}
+.card h3{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:700}
+.card p{margin:0;font-size:18px;font-weight:800}
+.upload-panel,.table-container,.chart-box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+.upload-panel h3{margin:0 0 14px;font-size:16px}
+.upload-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px}
+.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:200px}
+.field label{font-size:12px;font-weight:700;color:var(--muted)}
+.field input[type="file"]{padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.upload-result{min-height:22px;font-size:13px;font-weight:bold;margin:0 0 14px}
+.btn{border:1px solid var(--line);background:#fff;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:600}
+.btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.toolbar{display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.toolbar input{flex:1;min-width:200px;padding:10px 14px;border:1px solid var(--line);border-radius:10px}
 .data-table{width:100%;border-collapse:collapse;font-size:13px}
-.data-table th{color:#7a8491;text-align:right;font-weight:700;padding:12px;border-bottom:1px solid var(--line)}
-.data-table td{padding:13px 12px;border-bottom:1px solid #eef0f3;vertical-align:middle}
+.data-table th{color:#7a8491;text-align:right;font-weight:700;padding:14px 16px;border-bottom:1px solid var(--line);background:#f9fafb}
+.data-table td{padding:14px 16px;border-bottom:1px solid #eef0f3}
 .data-table tr:hover td{background:#fafbfd}
-.badge{display:inline-flex;padding:4px 10px;border-radius:999px;font-size:10px;font-weight:800}
-.bRed{background:var(--redbg);color:#b4232a}
-.bOrange{background:var(--orangebg);color:#a45100}
+.badge{display:inline-flex;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800}
 .bGreen{background:var(--greenbg);color:#107a5a}
-.bBlue{background:var(--bluebg);color:#1d4ed8}
-
-.chart-box{position:relative;height:280px}
-
+.bOrange{background:var(--orangebg);color:#a45100}
+.bRed{background:var(--redbg);color:#b4232a}
+.chart-box{height:320px}
+.chart-box canvas{max-height:260px}
+@media(max-width:1000px){
+  .cards{grid-template-columns:repeat(2,1fr)}
+}
 @media(max-width:900px){
   .sidebar{width:70px}
   .brand b,.brand small,.nav a span:not(.ico){display:none}
   .main{margin-right:70px;width:calc(100% - 70px)}
+  .cards{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -71,11 +73,13 @@ button,select{font:inherit;cursor:pointer}
       <div><b>RAYAD</b><small>BUSINESS CONTROL</small></div>
     </div>
     <nav class="nav">
-      <a href="dashboard.html"><span class="ico">⌂</span><span>داشبورد مدیرعامل</span></a>
+      <a href="dashboard.html"><span class="ico">⌂</span><span>داشبورد</span></a>
       <a href="finance.html"><span class="ico">₿</span><span>کنترل مالی</span></a>
-      <a href="transactions.html"><span class="ico">◈</span><span>مرکز تراکنش‌ها</span></a>
-      <a href="inventory.html" class="active"><span class="ico">▤</span><span>مدیریت انبار</span></a>
-      <a href="sales.html"><span class="ico">▣</span><span>فروش و حسابداری</span></a>
+      <a href="transactions.html"><span class="ico">◈</span><span>تراکنش‌ها</span></a>
+      <a href="sales.html"><span class="ico">▣</span><span>فروش</span></a>
+      <a href="suppliers.html"><span class="ico">◌</span><span>تأمین‌کنندگان</span></a>
+      <a href="inventory.html" class="active"><span class="ico">▤</span><span>انبار</span></a>
+      <a href="upload.html"><span class="ico">↑</span><span>آپلود</span></a>
       <a href="#" id="logoutBtn"><span class="ico">⏻</span><span>خروج</span></a>
     </nav>
   </aside>
@@ -83,79 +87,97 @@ button,select{font:inherit;cursor:pointer}
   <main class="main">
     <header class="topbar">
       <div class="titleRow">
-        <h1>مدیریت انبار و موجودی کالا</h1>
-        <p>پایش تعداد، ارزش ریالی و هشدار کالاهای کم‌موجودی</p>
+        <h1>موجودی انبار</h1>
+        <p>مدیریت، جستجو و به‌روزرسانی موجودی کالاها</p>
       </div>
-      <div style="border:1px solid var(--line);background:#fff;padding:8px 14px;border-radius:12px;font-size:12px;display:flex;align-items:center;gap:8px;">
-        <span style="width:32px;height:32px;background:var(--bluebg);color:var(--blue);border-radius:50%;display:grid;place-items:center;font-weight:700;">م</span>
+      <div style="border:1px solid var(--line);background:#fff;padding:8px 14px;border-radius:12px;font-size:12px;">
         <span id="welcomeText">مدیر سیستم</span>
       </div>
     </header>
 
     <div class="content">
-      <!-- KPI Cards -->
-      <div class="kpi-grid">
-        <div class="kpi-card">
-          <div class="icon">📦</div>
-          <div class="kpi-label">تعداد کل اقلام انبار</div>
-          <div class="kpi-value" id="kpi-total-items">-</div>
-          <div class="kpi-sub">کد کالای منحصر‌به‌فرد</div>
+      <!-- KPI -->
+      <section class="cards">
+        <div class="card">
+          <h3>تعداد کالا</h3>
+          <p id="kpi-total-items">—</p>
         </div>
-        <div class="kpi-card">
-          <div class="icon">💰</div>
-          <div class="kpi-label">ارزش کل موجودی انبار</div>
-          <div class="kpi-value" id="kpi-total-value">-</div>
-          <div class="kpi-sub">بر اساس قیمت میانگین موزون</div>
+        <div class="card">
+          <h3>ارزش کل</h3>
+          <p id="kpi-total-value">—</p>
         </div>
-        <div class="kpi-card">
-          <div class="icon">⚠️</div>
-          <div class="kpi-label">کالاهای کم‌موجودی (زیر نقطه سفارش)</div>
-          <div class="kpi-value" id="kpi-low-stock" style="color:var(--orange)">-</div>
-          <div class="kpi-sub">نیازمند اقدام خرید فوری</div>
+        <div class="card">
+          <h3>کم‌موجودی</h3>
+          <p id="kpi-low-stock">—</p>
         </div>
-        <div class="kpi-card">
-          <div class="icon">🚫</div>
-          <div class="kpi-label">کالاهای ناموجود (صفر)</div>
-          <div class="kpi-value" id="kpi-zero-stock" style="color:var(--red)">-</div>
-          <div class="kpi-sub">ریسک توقف خط تولید/فروش</div>
+        <div class="card">
+          <h3>ناموجود</h3>
+          <p id="kpi-zero-stock">—</p>
         </div>
+      </section>
+
+      <!-- Upload -->
+      <section class="upload-panel">
+        <h3>آپلود موجودی انبار</h3>
+
+        <div class="upload-row">
+          <div class="field">
+            <label for="inventoryQtyFile">فایل تعدادی (مرور تعدادی انبار محصول)</label>
+            <input type="file" id="inventoryQtyFile" accept=".xlsx,.xls,.csv">
+          </div>
+          <button type="button" id="inventoryQtyBtn" class="btn primary">آپلود تعدادی</button>
+        </div>
+        <p id="inventoryQtyMsg" class="upload-result"></p>
+
+        <div class="upload-row">
+          <div class="field">
+            <label for="inventoryValueFile">فایل مبلغی (مرور مبلغی انبار محصول)</label>
+            <input type="file" id="inventoryValueFile" accept=".xlsx,.xls,.csv">
+          </div>
+          <button type="button" id="inventoryValueBtn" class="btn primary">آپلود مبلغی</button>
+        </div>
+        <p id="inventoryValueMsg" class="upload-result"></p>
+      </section>
+
+      <!-- Search + Export -->
+      <div class="toolbar">
+        <input type="text" id="searchInput" placeholder="جستجوی کد یا عنوان کالا...">
+        <button type="button" class="btn" onclick="exportInventory()">خروجی CSV</button>
       </div>
 
-      <!-- Chart & Table -->
-      <div class="two-col">
-        <div class="card">
-          <h3 style="margin:0 0 16px 0;font-size:15px;">📊 ارزش انبار به تفکیک دسته‌بندی</h3>
-          <div class="chart-box"><canvas id="inventoryChart"></canvas></div>
-        </div>
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-            <h3 style="margin:0;font-size:15px;">🔴 کالاهای نیازمند توجه فوری</h3>
-            <button class="btn" style="padding:6px 12px;font-size:11px;" onclick="exportInventory()">خروجی Excel</button>
-          </div>
-          <div style="overflow-x:auto;">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>کد کالا</th>
-                  <th>نام کالا</th>
-                  <th>دسته‌بندی</th>
-                  <th>موجودی</th>
-                  <th>ارزش کل</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody id="inventoryBody">
-                <!-- داده‌ها توسط JS پر می‌شوند -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      <!-- Table -->
+      <section class="table-container" style="padding:0;overflow:hidden;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>کد</th>
+              <th>عنوان کالا</th>
+              <th>دسته</th>
+              <th>موجودی</th>
+              <th>ارزش</th>
+              <th>وضعیت</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryBody">
+            <tr>
+              <td colspan="6" style="text-align:center;padding:28px;color:#6b7280;">
+                در حال بارگذاری...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Chart -->
+      <section class="chart-box">
+        <h3 style="margin:0 0 12px;font-size:16px;">توزیع ارزش موجودی</h3>
+        <canvas id="inventoryChart"></canvas>
+      </section>
     </div>
   </main>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="js/api.js"></script>
 <script src="js/inventory.js"></script>
 </body>

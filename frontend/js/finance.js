@@ -1,160 +1,209 @@
-// Requires js/api.js to be loaded before this file in finance.html
-requireLogin();
+// Requires js/api.js
+// (requireLogin, getUser, logout, apiGet, apiUpload, formatNumber, toPersianDigits, escapeHtml)
 
-document.getElementById("logoutBtn")?.addEventListener("click", function (e) {
-    e.preventDefault();
-    logout();
-});
+if (!requireLogin()) throw new Error("not authenticated");
 
-const MAX_ROWS = 200;
+// کل کد داخل IIFE است تا نام ثابت‌ها (RISK_LABELS، TYPE_LABELS و ...) با فایل‌های دیگر تداخل نکند
+(function () {
+    document.getElementById("logoutBtn")?.addEventListener("click", function (e) {
+        e.preventDefault();
+        logout();
+    });
 
-const TYPE_LABELS = {
-    receivable: { text: "مطالبات", cls: "bBlue" },
-    payable: { text: "بدهی", cls: "bOrange" },
-    expense: { text: "هزینه", cls: "bRed" },
-};
-
-const TABS = [
-    { key: "all", label: "همه" },
-    { key: "receivable", label: "مطالبات" },
-    { key: "payable", label: "بدهی‌ها" },
-    { key: "expense", label: "هزینه‌ها" },
-];
-
-let allRows = [];
-let activeTab = "all";
-
-function renderType(type) {
-    const info = TYPE_LABELS[type];
-    if (!info) return escapeHtml(type);
-    return `<span class="badge ${info.cls}">${info.text}</span>`;
-}
-
-function getRiskBadge(riskLevel, riskScore) {
-    if (!riskLevel) return '<span class="badge bGray">نامشخص</span>';
-    const cls = riskLevel === "high" ? "bRed" : (riskLevel === "medium" ? "bOrange" : "bGreen");
-    const label = riskLevel === "high" ? "بالا" : (riskLevel === "medium" ? "متوسط" : "پایین");
-    const score = riskScore ? ` (${toPersianDigits(riskScore)}%)` : "";
-    return `<span class="badge ${cls}">${label}${score}</span>`;
-}
-
-function normalize(item) {
-    const rawType = item.type || item.transaction_type || (item.amount < 0 ? "payable" : "receivable");
-    const amountNum = Math.abs(Number(item.amount) || 0);
-
-    let description = item.description || item.note || "";
-    if (item.code) {
-        description = `کد: ${toPersianDigits(item.code)} ${description}`;
-    } else if (!description) {
-        description = "-";
+    const user = getUser();
+    const welcome = document.getElementById("welcomeText");
+    if (welcome && user) {
+        welcome.textContent = user.full_name || user.email || "مدیر سیستم";
     }
 
-    return {
-        id: item.id,
-        type: String(rawType).toLowerCase(),
-        party: item.party || item.customer_name || item.party_name || "-",
-        amount: amountNum,
-        hasAmount: item.amount !== undefined && item.amount !== null,
-        description: description,
-        riskLevel: item.risk_level || "low",
-        riskScore: item.risk_score || 0,
-        status: item.status || "normal"
+    const MAX_ROWS = 300;
+    const MAX_UPLOAD_MB = 20;
+    const ALLOWED_EXT = [".xlsx", ".xls", ".csv"];
+
+    const TYPE_LABELS = {
+        receivable: { text: "مطالبات", cls: "bGreen" },
+        payable: { text: "بدهی", cls: "bOrange" },
+        payment: { text: "پرداخت", cls: "bOrange" },
+        receipt: { text: "دریافت", cls: "bBlue" },
+        expense: { text: "هزینه", cls: "bGray" },
     };
-}
 
-function renderTabs() {
-    const nav = document.getElementById("financeTabs");
-    if (!nav) return;
+    const RISK_LABELS = {
+        low: { text: "کم", cls: "bGreen" },
+        medium: { text: "متوسط", cls: "bOrange" },
+        high: { text: "بالا", cls: "bRed" },
+    };
 
-    nav.innerHTML = TABS.map((t) => {
-        const count = t.key === "all"
-            ? allRows.length
-            : allRows.filter((r) => r.type === t.key).length;
-        const active = t.key === activeTab ? " active" : "";
-        return `<button type="button" class="tab${active}" data-tab="${t.key}">${t.label} (${formatNumber(count)})</button>`;
-    }).join("");
-}
+    const endpointMap = {
+        receivable: "/upload/receivables-excel",
+        payable: "/upload/payables-excel",
+        payment: "/upload/payments-excel",
+        receipt: "/upload/receipts-excel",
+        expense: "/upload/expense-report",
+    };
 
-function renderTable() {
-    const tbody = document.getElementById("financeBody");
-    const summary = document.getElementById("financeSummary");
-    if (!tbody) return;
-
-    const filtered = activeTab === "all"
-        ? allRows
-        : allRows.filter((r) => r.type === activeTab);
-
-    if (!filtered.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px; color: var(--muted);">موردی برای این بخش یافت نشد. فایل مربوط را آپلود کنید.</td></tr>';
-        if (summary) summary.textContent = "";
-        return;
+    function renderType(type) {
+        const info = TYPE_LABELS[String(type || "").toLowerCase()];
+        if (!info) return escapeHtml(type || "-");
+        return `<span class="badge ${info.cls}">${info.text}</span>`;
     }
 
-    tbody.innerHTML = filtered.slice(0, MAX_ROWS).map((r) => `
-        <tr>
-            <td>${renderType(r.type)}</td>
-            <td>${escapeHtml(r.party)}</td>
-            <td style="font-weight:bold; direction:ltr; text-align:right;">${r.hasAmount ? formatNumber(r.amount) : "۰"}</td>
-            <td>${getRiskBadge(r.riskLevel, r.riskScore)}</td>
-            <td>${escapeHtml(toPersianDigits(r.description))}</td>
-        </tr>
-    `).join("");
-
-    if (summary) {
-        const total = filtered.reduce((sum, r) => sum + r.amount, 0);
-        let text = `${formatNumber(filtered.length)} ردیف — جمع: ${formatNumber(total)} ${CURRENCY_LABEL}`;
-        if (filtered.length > MAX_ROWS) {
-            text += ` (نمایش ${formatNumber(MAX_ROWS)} ردیف اول)`;
-        }
-        summary.textContent = text;
+    function renderRisk(level) {
+        const info = RISK_LABELS[String(level || "").toLowerCase()];
+        if (!info) return escapeHtml(level || "-");
+        return `<span class="badge ${info.cls}">${info.text}</span>`;
     }
-}
 
-document.getElementById("financeTabs")?.addEventListener("click", function (e) {
-    const btn = e.target.closest("[data-tab]");
-    if (!btn) return;
-    activeTab = btn.dataset.tab;
-    renderTabs();
-    renderTable();
-});
+    // شمارنده‌ی درخواست: فقط آخرین پاسخ نمایش داده شود
+    let loadSeq = 0;
 
-async function loadFinanceData() {
-    const message = document.getElementById("message");
-    const tbody = document.getElementById("financeBody");
+    async function loadFinanceData() {
+        const message = document.getElementById("message");
+        const tbody = document.getElementById("financeBody");
+        if (!tbody) return;
 
-    if (!tbody) return;
+        const seq = ++loadSeq;
 
-    if (message) {
-        message.style.color = "";
-        message.textContent = "در حال دریافت اطلاعات...";
-    }
-    tbody.innerHTML = "";
-
-    try {
-        const response = await apiGet("/finance/");
-
-        // ✅ اصلاح مهم: پشتیبانی از هر دو فرمت پاسخ (آرایه مستقیم یا Paginated)
-        const data = Array.isArray(response) ? response : (response.items || []);
-
-        if (data.length === 0) {
-            if (message) message.textContent = "تراکنشی یافت نشد. از بخش آپلود، فایل اکسل را بارگذاری کنید.";
-            renderTabs();
-            return;
-        }
-
-        allRows = data.map(normalize);
-        if (message) message.textContent = "";
-
-        renderTabs();
-        renderTable();
-    } catch (error) {
         if (message) {
-            message.style.color = "var(--red)";
-            message.textContent = error.message || "خطا در دریافت لیست تراکنش‌ها";
+            message.style.color = "";
+            message.textContent = "در حال دریافت اطلاعات...";
         }
-        console.error("Finance load error:", error);
-    }
-}
+        tbody.innerHTML = "";
 
-// اجرای اولیه
-document.addEventListener("DOMContentLoaded", loadFinanceData);
+        try {
+            const data = await apiGet("/finance/");
+            if (seq !== loadSeq) return;
+
+            // پشتیبانی از هر دو فرمت پاسخ (آرایه مستقیم یا پاسخ صفحه‌بندی‌شده)
+            const items = Array.isArray(data) ? data : (data?.items || []);
+
+            if (items.length === 0) {
+                if (message) message.textContent = "تراکنشی یافت نشد.";
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align:center;color:#6b7280;padding:28px">
+                            داده‌ای برای نمایش وجود ندارد. از بالا فایل آپلود کنید.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            const rows = items.slice(0, MAX_ROWS);
+
+            tbody.innerHTML = rows.map((item) => {
+                const party = item.party_name || item.party || "-";
+                const amount = item.amount != null ? formatNumber(item.amount) : "۰";
+                let description = item.description || item.note || "-";
+                if (item.reference_number) {
+                    description = `شماره: ${item.reference_number} | ${description}`;
+                }
+
+                return `
+                    <tr>
+                        <td>${renderType(item.type)}</td>
+                        <td><b>${escapeHtml(party)}</b></td>
+                        <td>${escapeHtml(amount)}</td>
+                        <td>${renderRisk(item.risk_level || "low")}</td>
+                        <td>${escapeHtml(String(description))}</td>
+                    </tr>
+                `;
+            }).join("");
+
+            if (message) {
+                message.textContent = items.length > MAX_ROWS
+                    ? `نمایش ${formatNumber(MAX_ROWS)} ردیف اول از ${formatNumber(items.length)} مورد`
+                    : `${formatNumber(items.length)} مورد`;
+            }
+        } catch (error) {
+            if (seq !== loadSeq) return;
+            if (message) {
+                message.style.color = "#d9343a";
+                message.textContent = error.message || "خطا در دریافت لیست مالی";
+            }
+            console.error("Finance load error:", error);
+        }
+    }
+
+    function setUploadMsg(color, text) {
+        const box = document.getElementById("uploadResult");
+        if (!box) return;
+        box.style.color = color;
+        box.textContent = text;
+    }
+
+    function errorToText(e) {
+        if (typeof e === "string") return e;
+        if (e && typeof e === "object") return e.message || e.msg || e.error || JSON.stringify(e);
+        return String(e);
+    }
+
+    async function uploadFinanceFile() {
+        const type = document.getElementById("uploadType")?.value;
+        const fileInput = document.getElementById("uploadFile");
+        const btn = document.getElementById("uploadBtn");
+        const file = fileInput?.files?.[0];
+
+        if (!file) return setUploadMsg("#d9343a", "لطفاً فایل را انتخاب کنید");
+
+        const endpoint = endpointMap[type];
+        if (!endpoint) return setUploadMsg("#d9343a", "نوع فایل نامعتبر است");
+
+        const name = file.name.toLowerCase();
+        if (!ALLOWED_EXT.some((ext) => name.endsWith(ext))) {
+            return setUploadMsg("#d9343a", "فرمت فایل مجاز نیست (xlsx، xls یا csv)");
+        }
+        if (file.size === 0) return setUploadMsg("#d9343a", "فایل انتخاب‌شده خالی است");
+        if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+            return setUploadMsg("#d9343a", `حجم فایل بیشتر از ${toPersianDigits(MAX_UPLOAD_MB)} مگابایت است`);
+        }
+
+        const originalText = btn?.textContent;
+        setUploadMsg("#6b7280", "در حال آپلود و پردازش...");
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "در حال ارسال...";
+        }
+
+        try {
+            const result = await apiUpload(endpoint, file);
+
+            // result ممکن است null باشد (پاسخ غیر JSON)؛ آپلود موفق را خطا نشان نده
+            const parts = [result?.message || "آپلود با موفقیت انجام شد"];
+            if (typeof result?.created === "number") {
+                parts.push(`${toPersianDigits(result.created)} ردیف ثبت شد`);
+            }
+            if (result?.risk_summary?.high) {
+                parts.push(`ریسک بالا: ${toPersianDigits(result.risk_summary.high)} مورد`);
+            }
+            if (result?.skipped_duplicates) {
+                parts.push(`${toPersianDigits(result.skipped_duplicates)} مورد تکراری رد شد`);
+            }
+            if (Array.isArray(result?.errors) && result.errors.length) {
+                parts.push(`${toPersianDigits(result.errors.length)} ردیف خطا داشت (${errorToText(result.errors[0])})`);
+            }
+
+            // هیچ ردیفی ثبت نشده → موفقیت کامل نیست
+            const color = result?.created === 0 ? "#d97706" : "#15966f";
+            setUploadMsg(color, parts.join(" — "));
+
+            if (fileInput) fileInput.value = "";
+            await loadFinanceData();
+        } catch (error) {
+            setUploadMsg("#d9343a", error.message || "آپلود ناموفق بود");
+            console.error("Finance upload error:", error);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                if (originalText) btn.textContent = originalText;
+            }
+        }
+    }
+
+    document.getElementById("uploadBtn")?.addEventListener("click", uploadFinanceFile);
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", loadFinanceData);
+    } else {
+        loadFinanceData();
+    }
+})();

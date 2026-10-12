@@ -1,127 +1,129 @@
-// Requires js/api.js to be loaded before this file
+// Requires js/api.js to be loaded before this file in sales.html
+// بخش «فاکتورهای فروش»؛ داده از GET /sales/ (فیلدهای SalesInvoiceOut)
 requireLogin();
-
-const user = getUser();
-const welcome = document.getElementById("welcomeText");
-if (welcome && user) {
-    welcome.textContent = user.full_name || user.email || "مدیر سیستم";
-}
 
 document.getElementById("logoutBtn")?.addEventListener("click", function (e) {
     e.preventDefault();
     logout();
 });
 
-// --- داده‌های نمونه فاکتورها ---
-const mockInvoices = [
-    { id: "F-8231", supplier: "شرکت فولاد مبارکه", amount: 850000000, matchStatus: "mismatch", risk: "high", reason: "مبلغ غیرعادی + مغایرت با سفارش" },
-    { id: "F-8232", supplier: "پتروشیمی بندر امام", amount: 420000000, matchStatus: "matched", risk: "low", reason: "" },
-    { id: "F-8233", supplier: "شرکت ملی مس", amount: 1250000000, matchStatus: "mismatch", risk: "high", reason: "تغییر حساب بانکی تأمین‌کننده" },
-    { id: "F-8234", supplier: "ایران خودرو", amount: 320000000, matchStatus: "matched", risk: "low", reason: "" },
-    { id: "F-8235", supplier: "سایپا", amount: 280000000, matchStatus: "pending", risk: "medium", reason: "در انتظار رسید انبار" },
-    { id: "F-8236", supplier: "شرکت فولاد مبارکه", amount: 850000000, matchStatus: "mismatch", risk: "high", reason: "فاکتور تکراری (مبلغ و تاریخ یکسان)" },
-    { id: "F-8237", supplier: "مپنا", amount: 670000000, matchStatus: "matched", risk: "low", reason: "" },
-    { id: "F-8238", supplier: "ذوب‌آهن اصفهان", amount: 540000000, matchStatus: "pending", risk: "medium", reason: "مغایرت جزئی با سفارش خرید" }
-];
+(function () {
+    const PAGE = 100;
+    const STATUS = {
+        pending: { text: "در انتظار تسویه", cls: "warning" },
+        completed: { text: "تسویه‌شده", cls: "success" },
+    };
 
-function formatMoney(value) {
-    return formatNumber(value) + " " + CURRENCY_LABEL;
-}
+    let all = [];
+    let filtered = [];
+    let shown = PAGE;
 
-async function loadSalesDashboard() {
-    // در آینده: const data = await apiGet("/invoices/");
-    const data = mockInvoices;
+    const $ = (id) => document.getElementById(id);
+    const setText = (id, text) => { const el = $(id); if (el) el.textContent = text; };
 
-    // 1. محاسبه KPIها
-    const totalInvoices = data.length;
-    const matched = data.filter(inv => inv.matchStatus === "matched").length;
-    const mismatch = data.filter(inv => inv.matchStatus === "mismatch").length;
-    const highRisk = data.filter(inv => inv.risk === "high").length;
-    const matchRate = Math.round((matched / totalInvoices) * 100);
-
-    document.getElementById("kpi-total-invoices").textContent = toPersianDigits(totalInvoices) + " فاکتور";
-    document.getElementById("kpi-matched").textContent = toPersianDigits(matched) + " فاکتور";
-    document.getElementById("kpi-match-rate").textContent = toPersianDigits(matchRate) + "٪ تطابق کامل";
-    document.getElementById("kpi-mismatch").textContent = toPersianDigits(mismatch) + " فاکتور";
-    document.getElementById("kpi-high-risk").textContent = toPersianDigits(highRisk) + " فاکتور";
-
-    // 2. پر کردن جدول فاکتورهای نیازمند توجه (فقط mismatch و high risk)
-    const tbody = document.getElementById("invoiceBody");
-    const attentionInvoices = data.filter(inv => inv.matchStatus === "mismatch" || inv.risk === "high");
-
-    if (attentionInvoices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--green);">✅ همه فاکتورها بدون مغایرت هستند.</td></tr>';
-    } else {
-        tbody.innerHTML = attentionInvoices.map(inv => {
-            const matchBadge = inv.matchStatus === "matched"
-                ? '<span class="badge bGreen">تطبیق‌شده</span>'
-                : inv.matchStatus === "mismatch"
-                ? '<span class="badge bRed">مغایرت‌دار</span>'
-                : '<span class="badge bOrange">در انتظار</span>';
-
-            const riskBadge = inv.risk === "high"
-                ? '<span class="badge bRed">پرریسک</span>'
-                : inv.risk === "medium"
-                ? '<span class="badge bOrange">متوسط</span>'
-                : '<span class="badge bGreen">پایین</span>';
-
-            return `
-                <tr>
-                    <td style="font-family:monospace; font-weight:bold;">${toPersianDigits(inv.id)}</td>
-                    <td>${escapeHtml(inv.supplier)}</td>
-                    <td style="font-weight:bold;">${formatMoney(inv.amount)}</td>
-                    <td>${matchBadge}</td>
-                    <td>${riskBadge}</td>
-                </tr>
-            `;
-        }).join("");
+    // Decimal از سرور به‌صورت رشته می‌آید؛ همه‌جا به عدد تبدیل می‌شود
+    function normalize(item) {
+        const description = String(item.description || "").replace(/^نوع تسویه\s*:\s*/, "").trim();
+        return {
+            invoice: item.invoice_number || "",
+            customer: item.customer_name || "-",
+            date: String(item.sale_date || ""),
+            amount: Number(item.amount) || 0,
+            remaining: Number(item.remaining_amount) || 0,
+            description,
+            status: item.status || (Number(item.remaining_amount) > 0 ? "pending" : "completed"),
+        };
     }
 
-    // 3. رسم نمودار روند فاکتورهای ماهانه
-    renderInvoiceTrendChart();
-}
+    const norm = (s) => String(s || "").replace(/ي/g, "ی").replace(/ك/g, "ک").toLowerCase();
 
-function renderInvoiceTrendChart() {
-    const canvas = document.getElementById("invoiceTrendChart");
-    if (!canvas) return;
+    function normDate(s) {
+        const t = String(s || "").trim().replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d));
+        const m = t.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+        return m ? `${m[1]}/${m[2].padStart(2, "0")}/${m[3].padStart(2, "0")}` : "";
+    }
 
-    new Chart(canvas, {
-        type: "bar",
-        data: {
-            labels: ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور"],
-            datasets: [{
-                label: "تعداد فاکتورها",
-                data: [280, 310, 295, 342, 328, 350],
-                backgroundColor: "rgba(201, 162, 39, 0.55)",
-                borderColor: "#c9a227",
-                borderWidth: 2,
-                borderRadius: 8
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false }
-            },
-            scales: {
-                y: { beginAtZero: true, grid: { color: "#f3f4f6" } },
-                x: { grid: { display: false } }
-            }
-        }
+    function applyFilters() {
+        const status = $("saleStatus")?.value || "";
+        const from = normDate($("saleFrom")?.value);
+        const to = normDate($("saleTo")?.value);
+        const term = norm($("saleSearch")?.value).trim();
+
+        filtered = all.filter((s) =>
+            (!status || s.status === status) &&
+            (!from || s.date >= from) &&
+            (!to || s.date <= to) &&
+            (!term || norm(`${s.customer} ${s.invoice} ${s.description}`).includes(term)));
+        shown = PAGE;
+        render();
+    }
+
+    ["saleStatus"].forEach((id) => $(id)?.addEventListener("change", applyFilters));
+    ["saleFrom", "saleTo", "saleSearch"].forEach((id) => $(id)?.addEventListener("input", applyFilters));
+    $("saleClear")?.addEventListener("click", () => {
+        ["saleFrom", "saleTo", "saleSearch"].forEach((id) => { if ($(id)) $(id).value = ""; });
+        if ($("saleStatus")) $("saleStatus").value = "";
+        applyFilters();
     });
-}
+    $("saleMore")?.addEventListener("click", () => { shown += PAGE; renderTable(); });
 
-// شبیه‌سازی خروجی اکسل
-window.exportInvoices = function() {
-    const btn = event.target;
-    const originalText = btn.textContent;
-    btn.textContent = "⏳ در حال تهیه...";
-    setTimeout(() => {
-        btn.textContent = "✅ دانلود شد";
-        setTimeout(() => { btn.textContent = originalText; }, 2000);
-    }, 1000);
-};
+    function render() {
+        const open = filtered.filter((s) => s.remaining > 0);
+        setText("kpiSaleTotal", formatNumber(filtered.reduce((t, s) => t + s.amount, 0)));
+        setText("kpiSaleOpen", formatNumber(open.reduce((t, s) => t + s.remaining, 0)));
+        setText("kpiSaleCount", formatNumber(filtered.length));
+        setText("kpiSaleOpenCount", formatNumber(open.length));
+        renderTable();
+    }
 
-// Initialize
-document.addEventListener("DOMContentLoaded", loadSalesDashboard);
+    function renderTable() {
+        const tbody = $("salesBody") || document.querySelector("#salesTable tbody");
+        if (!tbody) return;
+
+        tbody.innerHTML = filtered.slice(0, shown).map((s) => {
+            const st = STATUS[s.status] || { text: s.status, cls: "" };
+            const remaining = s.remaining > 0
+                ? `<strong class="neg">${formatNumber(s.remaining)}</strong>`
+                : '<span class="muted">-</span>';
+            return `
+                <tr>
+                    <td>${s.invoice ? escapeHtml(toPersianDigits(s.invoice)) : '<span class="muted">-</span>'}</td>
+                    <td>${escapeHtml(s.customer)}</td>
+                    <td>${escapeHtml(toPersianDigits(s.date))}</td>
+                    <td>${formatNumber(s.amount)}</td>
+                    <td>${remaining}</td>
+                    <td class="clip" title="${escapeHtml(s.description)}">${s.description ? escapeHtml(toPersianDigits(s.description)) : '<span class="muted">-</span>'}</td>
+                    <td><span class="badge ${st.cls}">${escapeHtml(st.text)}</span></td>
+                </tr>`;
+        }).join("");
+
+        setText("saleCount", filtered.length
+            ? `نمایش ${formatNumber(Math.min(shown, filtered.length))} از ${formatNumber(filtered.length)} فاکتور`
+            : "فاکتوری یافت نشد");
+        const more = $("saleMore");
+        if (more) more.hidden = shown >= filtered.length;
+    }
+
+    async function loadSales() {
+        const message = $("message");
+        try {
+            const data = await apiGet("/sales/");
+            all = (Array.isArray(data) ? data : []).map(normalize);
+
+            if (message) {
+                message.textContent = all.length
+                    ? `${formatNumber(all.length)} فاکتور — مبالغ به ${CURRENCY_LABEL}`
+                    : "هنوز فاکتوری ثبت نشده. فایل فاکتورهای فروش را از بالای صفحه آپلود کنید.";
+            }
+            applyFilters();
+        } catch (error) {
+            if (message) {
+                message.style.color = "var(--danger)";
+                message.textContent = error.message || "خطا در دریافت لیست فروش";
+            }
+            console.error("Sales load error:", error);
+        }
+    }
+
+    loadSales();
+})();

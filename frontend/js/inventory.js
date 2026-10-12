@@ -1,130 +1,318 @@
-// Requires js/api.js to be loaded before this file
-requireLogin();
+// Requires js/api.js (و Chart.js در صورت نیاز)
+// requireLogin, getUser, logout, apiGet, apiUpload, formatNumber, toPersianDigits, escapeHtml, CURRENCY_LABEL
 
-const user = getUser();
-const welcome = document.getElementById("welcomeText");
-if (welcome && user) {
-    welcome.textContent = user.full_name || user.email || "مدیر سیستم";
-}
+if (!requireLogin()) throw new Error("not authenticated");
 
-document.getElementById("logoutBtn")?.addEventListener("click", function (e) {
-    e.preventDefault();
-    logout();
-});
+(function () {
+    const $ = (id) => document.getElementById(id);
 
-// --- داده‌های نمونه (بعداً با داده واقعی از بک‌اند جایگزین می‌شود) ---
-const mockInventoryData = [
-    { code: "1001", name: "لپ‌تاپ Lenovo ThinkPad", category: "تجهیزات IT", qty: 45, price: 45000000, status: "normal" },
-    { code: "1002", name: "مانیتور Samsung 24 inch", category: "تجهیزات IT", qty: 120, price: 8500000, status: "normal" },
-    { code: "2001", name: "کاغذ A4 بسته 500 تایی", category: "ملزومات اداری", qty: 8, price: 1200000, status: "low" }, // کم‌موجودی
-    { code: "2002", name: "خودکار آبی جعبه‌ای", category: "ملزومات اداری", qty: 0, price: 850000, status: "zero" }, // ناموجود
-    { code: "3001", name: "میز مدیریت چوبی", category: "مبلمان", qty: 15, price: 12000000, status: "normal" },
-    { code: "3002", name: "صندلی ارگونومیک", category: "مبلمان", qty: 3, price: 6500000, status: "low" },
-    { code: "4001", name: "سرور HP ProLiant", category: "تجهیزات IT", qty: 2, price: 180000000, status: "normal" },
-    { code: "5001", name: "کارتریج پرینتر HP", category: "ملزومات اداری", qty: 0, price: 3200000, status: "zero" }
-];
+    const LOW_STOCK_DEFAULT = 10;
+    const MAX_UPLOAD_MB = 20;
+    const ALLOWED_EXT = [".xlsx", ".xls", ".csv"];
+    const CHART_COLORS = ["#2563eb", "#c9a227", "#15966f", "#d9343a", "#8b5cf6", "#0891b2", "#ea580c", "#64748b"];
 
-function formatMoney(value) {
-    return formatNumber(value) + " " + CURRENCY_LABEL;
-}
+    let inventoryChart = null;
+    let currentItems = [];
 
-async function loadInventoryDashboard() {
-    // در آینده: const data = await apiGet("/inventory/stats");
-    const data = mockInventoryData;
-
-    // 1. محاسبه KPIها
-    const totalItems = data.length;
-    const totalValue = data.reduce((sum, item) => sum + (item.qty * item.price), 0);
-    const lowStock = data.filter(item => item.status === "low").length;
-    const zeroStock = data.filter(item => item.status === "zero").length;
-
-    document.getElementById("kpi-total-items").textContent = toPersianDigits(totalItems) + " قلم";
-    document.getElementById("kpi-total-value").textContent = formatMoney(totalValue);
-    document.getElementById("kpi-low-stock").textContent = toPersianDigits(lowStock) + " قلم";
-    document.getElementById("kpi-zero-stock").textContent = toPersianDigits(zeroStock) + " قلم";
-
-    // 2. پر کردن جدول کالاهای نیازمند توجه (فقط low و zero)
-    const tbody = document.getElementById("inventoryBody");
-    const attentionItems = data.filter(item => item.status === "low" || item.status === "zero");
-
-    if (attentionItems.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--green);">✅ همه کالاها در وضعیت مطلوبی هستند.</td></tr>';
-    } else {
-        tbody.innerHTML = attentionItems.map(item => {
-            const statusBadge = item.status === "zero"
-                ? '<span class="badge bRed">ناموجود</span>'
-                : '<span class="badge bOrange">کم‌موجودی</span>';
-
-            return `
-                <tr>
-                    <td style="font-family:monospace; font-weight:bold;">${toPersianDigits(item.code)}</td>
-                    <td>${escapeHtml(item.name)}</td>
-                    <td>${escapeHtml(item.category)}</td>
-                    <td style="font-weight:bold;">${toPersianDigits(item.qty)}</td>
-                    <td>${formatMoney(item.qty * item.price)}</td>
-                    <td>${statusBadge}</td>
-                </tr>
-            `;
-        }).join("");
+    const user = getUser();
+    const welcome = $("welcomeText");
+    if (welcome && user) {
+        welcome.textContent = user.full_name || user.email || "مدیر سیستم";
     }
 
-    // 3. رسم نمودار ارزش انبار به تفکیک دسته‌بندی
-    renderInventoryChart(data);
-}
-
-function renderInventoryChart(data) {
-    const canvas = document.getElementById("inventoryChart");
-    if (!canvas) return;
-
-    // گروه‌بندی ارزش بر اساس دسته‌بندی
-    const categories = {};
-    data.forEach(item => {
-        const value = item.qty * item.price;
-        categories[item.category] = (categories[item.category] || 0) + value;
+    $("logoutBtn")?.addEventListener("click", function (e) {
+        e.preventDefault();
+        logout();
     });
 
-    const labels = Object.keys(categories);
-    const values = Object.values(categories);
-    const colors = ["#2563eb", "#c9a227", "#15966f", "#d9343a", "#8b5cf6"];
+    function formatMoney(value) {
+        return formatNumber(Number(value || 0)) + " " + (typeof CURRENCY_LABEL !== "undefined" ? CURRENCY_LABEL : "ریال");
+    }
 
-    new Chart(canvas, {
-        type: "doughnut",
-        data: {
-            labels: labels,
-            datasets: [{
-                data: values,
-                backgroundColor: colors,
-                borderWidth: 0,
-                hoverOffset: 10
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: "bottom", labels: { font: { family: "Tahoma", size: 12 }, padding: 15 } },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.label + ": " + formatMoney(context.raw);
-                        }
-                    }
-                }
-            }
+    function setText(id, text) {
+        const el = $(id);
+        if (el) el.textContent = text;
+    }
+
+    function itemTitle(item) {
+        return item.title || item.name || "-";
+    }
+
+    function stockState(item) {
+        const qty = Number(item.quantity) || 0;
+        if (qty <= 0) return "zero";
+        const threshold =
+            Number(item.reorder_point) || Number(item.min_quantity) || LOW_STOCK_DEFAULT;
+        return qty < threshold ? "low" : "ok";
+    }
+
+    function setBodyMessage(html) {
+        const tbody = $("inventoryBody");
+        if (tbody) tbody.innerHTML = html;
+    }
+
+    function destroyChart() {
+        if (inventoryChart) {
+            inventoryChart.destroy();
+            inventoryChart = null;
         }
+    }
+
+    async function loadInventoryDashboard() {
+        try {
+            const data = await apiGet("/inventory/");
+            const items = Array.isArray(data) ? data : (data?.items || []);
+            currentItems = items;
+
+            if (items.length === 0) {
+                setText("kpi-total-items", "۰ قلم");
+                setText("kpi-total-value", formatMoney(0));
+                setText("kpi-low-stock", "۰ قلم");
+                setText("kpi-zero-stock", "۰ قلم");
+                destroyChart();
+                setBodyMessage(
+                    '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted);">' +
+                    "هنوز داده‌ای وارد نشده. اول فایل تعدادی، بعد فایل مبلغی را آپلود کنید." +
+                    "</td></tr>"
+                );
+                return;
+            }
+
+            const totalValue = items.reduce((sum, item) => sum + (Number(item.total_value) || 0), 0);
+            const states = items.map(stockState);
+            const lowStock = states.filter((s) => s === "low").length;
+            const zeroStock = states.filter((s) => s === "zero").length;
+
+            setText("kpi-total-items", toPersianDigits(items.length) + " قلم");
+            setText("kpi-total-value", formatMoney(totalValue));
+            setText("kpi-low-stock", toPersianDigits(lowStock) + " قلم");
+            setText("kpi-zero-stock", toPersianDigits(zeroStock) + " قلم");
+
+            // اگر جدول کامل می‌خواهی همه را نشان بده؛ اگر فقط نیازمند توجه:
+            const showAll = true;
+            const rows = showAll
+                ? items.map((item) => ({ item, state: stockState(item) }))
+                : items
+                    .map((item) => ({ item, state: stockState(item) }))
+                    .filter((x) => x.state !== "ok")
+                    .sort((a, b) => (a.state === "zero" ? 0 : 1) - (b.state === "zero" ? 0 : 1));
+
+            if (rows.length === 0) {
+                setBodyMessage(
+                    '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--green);">همه کالاها در وضعیت مطلوب هستند.</td></tr>'
+                );
+            } else {
+                setBodyMessage(rows.map(({ item, state }) => {
+                    const qty = Number(item.quantity) || 0;
+                    let badge = '<span class="badge bGreen">عادی</span>';
+                    if (state === "zero") badge = '<span class="badge bRed">ناموجود</span>';
+                    else if (state === "low") badge = '<span class="badge bOrange">کم‌موجودی</span>';
+
+                    return `
+                        <tr>
+                            <td style="font-family:monospace;font-weight:bold;">${escapeHtml(toPersianDigits(item.code || "-"))}</td>
+                            <td>${escapeHtml(itemTitle(item))}</td>
+                            <td>${escapeHtml(item.category || "محصول")}</td>
+                            <td style="font-weight:bold;">${escapeHtml(toPersianDigits(qty))}</td>
+                            <td>${escapeHtml(formatMoney(item.total_value))}</td>
+                            <td>${badge}</td>
+                        </tr>`;
+                }).join(""));
+            }
+
+            renderInventoryChart(items);
+        } catch (error) {
+            console.error("Inventory Load Error:", error);
+            setText("kpi-total-items", "خطا");
+            setText("kpi-total-value", "-");
+            setText("kpi-low-stock", "-");
+            setText("kpi-zero-stock", "-");
+            setBodyMessage(
+                '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--red);">' +
+                escapeHtml("خطا در دریافت اطلاعات: " + (error.message || "")) +
+                "</td></tr>"
+            );
+        }
+    }
+
+    function renderInventoryChart(items) {
+        const canvas = $("inventoryChart");
+        if (!canvas || typeof Chart === "undefined") return;
+
+        const categories = {};
+        items.forEach((item) => {
+            const cat = item.category || "دسته‌بندی نشده";
+            categories[cat] = (categories[cat] || 0) + (Number(item.total_value) || 0);
+        });
+
+        const labels = Object.keys(categories);
+        const values = Object.values(categories);
+
+        destroyChart();
+        inventoryChart = new Chart(canvas, {
+            type: "doughnut",
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+                    borderWidth: 0,
+                    hoverOffset: 10,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: "bottom",
+                        labels: { font: { family: "Tahoma", size: 12 }, padding: 15 },
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => context.label + ": " + formatMoney(context.raw),
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    function csvCell(value) {
+        if (typeof value === "number") return String(value);
+        let s = String(value ?? "");
+        if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+        return '"' + s.replace(/"/g, '""') + '"';
+    }
+
+    window.exportInventory = function () {
+        if (!currentItems.length) {
+            alert("داده‌ای برای خروجی وجود ندارد.");
+            return;
+        }
+
+        const statusText = { zero: "ناموجود", low: "کم‌موجودی", ok: "عادی" };
+        const header = ["کد کالا", "نام کالا", "دسته‌بندی", "موجودی", "ارزش کل", "وضعیت"];
+        const rows = currentItems.map((item) => [
+            item.code ?? "",
+            itemTitle(item),
+            item.category ?? "",
+            Number(item.quantity) || 0,
+            Number(item.total_value) || 0,
+            statusText[stockState(item)],
+        ]);
+
+        const csv = [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n");
+        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "inventory-" + new Date().toISOString().slice(0, 10) + ".csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    // ===== آپلود =====
+    function setMsg(id, color, text) {
+        const box = $(id);
+        if (!box) return;
+        box.style.color = color;
+        box.textContent = text;
+    }
+
+    async function handleInventoryUpload({ fileInputId, msgId, btn, endpoint, successText }) {
+        const fileInput = $(fileInputId);
+        const file = fileInput?.files?.[0];
+
+        if (!file) {
+            return setMsg(msgId, "var(--red)", "لطفاً فایل را انتخاب کنید");
+        }
+
+        const name = file.name.toLowerCase();
+        if (!ALLOWED_EXT.some((ext) => name.endsWith(ext))) {
+            return setMsg(msgId, "var(--red)", "فرمت مجاز: xlsx، xls یا csv");
+        }
+        if (file.size === 0) {
+            return setMsg(msgId, "var(--red)", "فایل خالی است");
+        }
+        if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+            return setMsg(msgId, "var(--red)", "حجم فایل زیاد است");
+        }
+
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "در حال پردازش...";
+        setMsg(msgId, "var(--blue)", "در حال آپلود...");
+
+        try {
+            const data = await apiUpload(endpoint, file);
+            const count = toPersianDigits(data?.created ?? data?.matched ?? 0);
+            setMsg(msgId, "var(--green)", `${successText} — ${count} مورد`);
+            fileInput.value = "";
+            await loadInventoryDashboard();
+        } catch (error) {
+            setMsg(msgId, "var(--red)", error.message || "آپلود ناموفق بود");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = original;
+        }
+    }
+
+    $("inventoryQtyBtn")?.addEventListener("click", function () {
+        handleInventoryUpload({
+            fileInputId: "inventoryQtyFile",
+            msgId: "inventoryQtyMsg",
+            btn: this,
+            endpoint: "/inventory/upload",
+            successText: "✅ آپلود تعدادی انجام شد",
+        });
     });
-}
 
-// شبیه‌سازی خروجی اکسل
-window.exportInventory = function() {
-    const btn = event.target;
-    const originalText = btn.textContent;
-    btn.textContent = "⏳ در حال تهیه...";
-    setTimeout(() => {
-        btn.textContent = "✅ دانلود شد";
-        setTimeout(() => { btn.textContent = originalText; }, 2000);
-    }, 1000);
-};
+    $("inventoryValueBtn")?.addEventListener("click", function () {
+        handleInventoryUpload({
+            fileInputId: "inventoryValueFile",
+            msgId: "inventoryValueMsg",
+            btn: this,
+            endpoint: "/inventory/upload-value",
+            successText: "✅ آپلود مبلغی انجام شد",
+        });
+    });
 
-// Initialize
-document.addEventListener("DOMContentLoaded", loadInventoryDashboard);
+    // جستجو (اگر input با id=searchInput داری)
+    $("searchInput")?.addEventListener("input", function () {
+        const q = (this.value || "").trim().toLowerCase();
+        if (!q) {
+            loadInventoryDashboard();
+            return;
+        }
+        const filtered = currentItems.filter((item) => {
+            const code = String(item.code || "").toLowerCase();
+            const title = String(itemTitle(item)).toLowerCase();
+            return code.includes(q) || title.includes(q);
+        });
+        setBodyMessage(filtered.map((item) => {
+            const state = stockState(item);
+            const qty = Number(item.quantity) || 0;
+            let badge = '<span class="badge bGreen">عادی</span>';
+            if (state === "zero") badge = '<span class="badge bRed">ناموجود</span>';
+            else if (state === "low") badge = '<span class="badge bOrange">کم‌موجودی</span>';
+            return `
+                <tr>
+                    <td>${escapeHtml(toPersianDigits(item.code || "-"))}</td>
+                    <td>${escapeHtml(itemTitle(item))}</td>
+                    <td>${escapeHtml(item.category || "محصول")}</td>
+                    <td>${escapeHtml(toPersianDigits(qty))}</td>
+                    <td>${escapeHtml(formatMoney(item.total_value))}</td>
+                    <td>${badge}</td>
+                </tr>`;
+        }).join("") || '<tr><td colspan="6" style="text-align:center;padding:20px;">موردی پیدا نشد</td></tr>');
+    });
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", loadInventoryDashboard);
+    } else {
+        loadInventoryDashboard();
+    }
+})();

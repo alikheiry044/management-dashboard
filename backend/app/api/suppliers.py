@@ -1,101 +1,116 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from decimal import Decimal
+import pandas as pd
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from sqlalchemy import delete, select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import func
-from typing import List, Optional
-from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
+from app.models.supplier import Supplier
+from app.api.upload import normalize_persian, clean_amount
+from app.api.upload_finance import _read_uploaded_table, _is_total_row
 
-router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
-
-
-# ===== Models =====
-class SupplierOut(BaseModel):
-    id: int
-    name: str
-    code: str
-    bank_name: Optional[str] = None
-    account_number: Optional[str] = None
-    risk_level: str
-    risk_score: int
-    status: str  # active, inactive, high_risk
-
-    class Config:
-        from_attributes = True
+router = APIRouter(
+    prefix="/suppliers",
+    tags=["Suppliers"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
-# ===== Endpoints =====
-@router.get("/list")
-async def get_suppliers(
-        risk_level: Optional[str] = Query(None),
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
-):
-    """لیست تأمین‌کنندگان"""
-
-    # داده‌های نمونه
-    suppliers = [
+@router.get("/")
+async def list_suppliers(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Supplier).order_by(desc(Supplier.credit_balance))
+    )
+    rows = result.scalars().all()
+    return [
         {
-            "id": 1,
-            "name": "شرکت فولاد مبارکه اصفهان",
-            "code": "SUP-001",
-            "bank_name": "ملت",
-            "account_number": "0123456789",
-            "risk_level": "low",
-            "risk_score": 15,
-            "status": "active"
-        },
-        {
-            "id": 2,
-            "name": "پتروشیمی بندر امام",
-            "code": "SUP-002",
-            "bank_name": "صادرات",
-            "account_number": "9876543210",
-            "risk_level": "low",
-            "risk_score": 20,
-            "status": "active"
-        },
-        {
-            "id": 3,
-            "name": "شرکت آلفا تأمین",
-            "code": "SUP-003",
-            "bank_name": "پارسیان",
-            "account_number": "5551234567",
-            "risk_level": "high",
-            "risk_score": 75,
-            "status": "high_risk"
-        },
-        {
-            "id": 4,
-            "name": "شرکت ملی مس ایران",
-            "code": "SUP-004",
-            "bank_name": "تجارت",
-            "account_number": "7778889990",
-            "risk_level": "medium",
-            "risk_score": 45,
-            "status": "active"
+            "id": r.id,
+            "code": r.code,
+            "name": r.name,
+            "debit_turnover": str(r.debit_turnover or 0),
+            "debit_balance": str(r.debit_balance or 0),
+            "credit_balance": str(r.credit_balance or 0),
         }
+        for r in rows
     ]
 
-    # فیلتر کردن
-    if risk_level:
-        suppliers = [s for s in suppliers if s["risk_level"] == risk_level]
 
-    return suppliers
-
-
-@router.get("/stats")
-async def get_supplier_stats(
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+@router.post("/upload")
+async def upload_suppliers_excel(
+    file: UploadFile = File(...),
+    replace: bool = Query(True, description="حذف لیست قبلی قبل از ثبت"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """آمار تأمین‌کنندگان"""
+    df = await _read_uploaded_table(file)
+
+    column_map = {
+        "کد": "code",
+        "عنوان": "name",
+        "گردش بدهکار": "debit_turnover",
+        "مانده بدهکار": "debit_balance",
+        "مانده بستانکار": "credit_balance",
+    }
+    df = df.rename(columns={c: column_map[c] for c in df.columns if c in column_map})
+
+    if "name" not in df.columns:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ستون عنوان پیدا نشد. ستون‌ها: {list(df.columns)}",
+        )
+
+    items = []
+    errors = []
+    skipped_totals = 0
+
+    for idx, row in df.iterrows():
+        try:
+            name_raw = row.get("name")
+            if pd.isna(name_raw) or str(name_raw).strip() == "":
+                continue
+
+            name = str(name_raw).strip()
+            if _is_total_row(name):
+                skipped_totals += 1
+                continue
+
+            code = row.get("code")
+            code_text = None
+            if pd.notna(code):
+                if isinstance(code, float) and code.is_integer():
+                    code_text = str(int(code))
+                else:
+                    code_text = str(code).strip()
+
+            items.append(
+                Supplier(
+                    code=code_text,
+                    name=name,
+                    debit_turnover=clean_amount(row.get("debit_turnover")) if "debit_turnover" in df.columns else Decimal("0"),
+                    debit_balance=clean_amount(row.get("debit_balance")) if "debit_balance" in df.columns else Decimal("0"),
+                    credit_balance=clean_amount(row.get("credit_balance")) if "credit_balance" in df.columns else Decimal("0"),
+                )
+            )
+        except Exception as e:
+            errors.append(f"ردیف {idx + 2}: {str(e)}")
+
+    if not items:
+        raise HTTPException(
+            status_code=400,
+            detail="هیچ ردیف معتبری پیدا نشد؛ داده قبلی تغییر نکرد.",
+        )
+
+    if replace:
+        await db.execute(delete(Supplier))
+
+    db.add_all(items)
+    await db.commit()
+
     return {
-        "total_suppliers": 4,
-        "active": 3,
-        "high_risk": 1,
-        "bank_changes": 0
+        "message": "آپلود تأمین‌کنندگان انجام شد",
+        "created": len(items),
+        "skipped_totals": skipped_totals,
+        "errors": errors[:30],
     }

@@ -5,6 +5,8 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from typing import Literal
+import tempfile
+import os
 
 import pandas as pd
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
@@ -12,13 +14,12 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-# NOTE: adjust the name if your deps.py exposes the auth dependency differently
 from app.core.deps import get_current_user
 from app.models.report_snapshot import ReportSnapshot
 from app.models.sales import SalesInvoice
 from app.models.user import User
+from app.models.inventory import InventoryItem
 
-# Every route in this router requires a valid token
 router = APIRouter(
     prefix="/upload",
     tags=["Upload"],
@@ -28,20 +29,10 @@ router = APIRouter(
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 
 _EMPTY_AMOUNTS = {"", "-", "—", "nan", "none"}
-
-# Matches summary rows such as "جمع", "جمع کل", "مجموع", "جمع:"
 _TOTAL_ROW = re.compile(r"^(جمع|مجموع)(\s|:|$)")
 
 
 def clean_amount(value):
-    """
-    Converts a cell value to Decimal.
-    - empty / "-" / NaN  -> 0
-    - "(1,000)"          -> -1000
-    - Persian separators (٬ ٫) are handled
-    - anything else unparsable raises ValueError (callers record it as a row error
-      instead of silently turning it into 0)
-    """
     if value is None or pd.isna(value):
         return Decimal("0")
 
@@ -71,10 +62,9 @@ def clean_amount(value):
 
 
 def normalize_persian(text: str) -> str:
-    """تبدیل حروف عربی به معادل فارسی‌شان برای مقایسه‌ی درست نام ستون‌ها."""
     return (
-        str(text).replace("ي", "ی")  # ي عربی -> ی فارسی
-                 .replace("ك", "ک")  # ك عربی -> ک فارسی
+        str(text).replace("ي", "ی")
+        .replace("ك", "ک")
     )
 
 
@@ -83,17 +73,15 @@ def is_total_row(name: str) -> bool:
 
 
 def normalize_sale_date(value):
-    """Real Excel dates -> YYYY-MM-DD; text dates are kept as-is; empty -> None."""
     if value is None or pd.isna(value):
         return None
-    if isinstance(value, (datetime, date)):  # pd.Timestamp is a datetime subclass
+    if isinstance(value, (datetime, date)):
         return value.strftime("%Y-%m-%d")
     text = str(value).strip()
     return text or None
 
 
 def read_ms_xml_spreadsheet(content: bytes) -> pd.DataFrame:
-    """خواندن فایل‌های SpreadsheetML (XML اکسل ۲۰۰۳) که بعضی نرم‌افزارها با پسوند .xls تولید می‌کنند."""
     ns = {"ss": "urn:schemas-microsoft-com:office:spreadsheet"}
     root = ET.fromstring(content)
     worksheet = root.find("ss:Worksheet", ns)
@@ -130,7 +118,7 @@ def read_ms_xml_spreadsheet(content: bytes) -> pd.DataFrame:
 
 
 async def read_uploaded_table(file: UploadFile) -> pd.DataFrame:
-    """Shared reader (upload_finance.py can import this instead of keeping its own copy)."""
+    """خواندن فایل اکسل با پشتیبانی از همه فرمت‌ها"""
     if not file.filename:
         raise HTTPException(status_code=400, detail="فایل ارسال نشده است")
 
@@ -142,31 +130,43 @@ async def read_uploaded_table(file: UploadFile) -> pd.DataFrame:
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="حجم فایل بیشتر از ۲۰ مگابایت است")
 
+    # ✅ راه‌حل: ذخیره موقت فایل با پسوند صحیح
+    ext = os.path.splitext(filename)[1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
     try:
         if filename.endswith(".csv"):
-            df = pd.read_csv(BytesIO(content))
-        else:
+            df = pd.read_csv(tmp_path)
+        elif filename.endswith(".xlsx"):
+            df = pd.read_excel(tmp_path, engine="openpyxl")
+        elif filename.endswith(".xls"):
+            # تلاش با xlrd برای فایل‌های قدیمی
             try:
-                # calamine هم .xls و هم .xlsx واقعی را پشتیبانی می‌کند
-                df = pd.read_excel(BytesIO(content), engine="calamine")
+                df = pd.read_excel(tmp_path, engine="xlrd")
             except Exception:
+                # اگر xlrd کار نکرد، تلاش با XML
                 try:
-                    # بعضی نرم‌افزارها خروجی .xls می‌دهند که در واقع XML اکسل ۲۰۰۳ است
                     df = read_ms_xml_spreadsheet(content)
                 except Exception:
-                    tables = pd.read_html(BytesIO(content))
+                    # آخرین تلاش: read_html
+                    tables = pd.read_html(tmp_path)
                     if not tables:
                         raise ValueError("جدولی در فایل پیدا نشد")
                     df = tables[0]
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"خواندن فایل ناموفق بود: {str(e)}")
+    finally:
+        # پاک کردن فایل موقت
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
     df.columns = [normalize_persian(str(c).strip()) for c in df.columns]
     return df
 
 
 def add_snapshot(db, *, report_type, total, row_count, filename, mode, user):
-    """Adds a history row in the SAME transaction as the data (commit happens in the caller)."""
     db.add(ReportSnapshot(
         report_type=report_type,
         total_amount=total,
@@ -179,17 +179,13 @@ def add_snapshot(db, *, report_type, total, row_count, filename, mode, user):
 
 @router.post("/sales-excel")
 async def upload_sales_excel(
-    file: UploadFile = File(...),
-    mode: Literal["skip_duplicates", "append", "replace"] = Query(
-        "skip_duplicates",
-        description=(
-            "skip_duplicates: فاکتورهای تکراری (مشتری+تاریخ+مبلغ) رد می‌شوند | "
-            "append: همه اضافه می‌شوند | "
-            "replace: همهٔ فاکتورهای قبلی حذف می‌شوند"
+        file: UploadFile = File(...),
+        mode: Literal["skip_duplicates", "append", "replace"] = Query(
+            "skip_duplicates",
+            description="skip_duplicates: فاکتورهای تکراری رد می‌شوند | append: همه اضافه می‌شوند | replace: همه حذف و جایگزین می‌شوند",
         ),
-    ),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     df = await read_uploaded_table(file)
 
@@ -210,7 +206,6 @@ async def upload_sales_excel(
             detail=f"ستون‌های ضروری یافت نشد: {missing}. ستون‌های فایل: {list(df.columns)}",
         )
 
-    # Existing invoices as a multiset of (customer, date, amount) for duplicate detection
     existing = Counter()
     if mode == "skip_duplicates":
         result = await db.execute(
@@ -244,7 +239,7 @@ async def upload_sales_excel(
             )
 
             if amount <= 0:
-                skipped_nonpositive += 1  # e.g. sales returns; counted, not silent
+                skipped_nonpositive += 1
                 continue
 
             sale_date = normalize_sale_date(row.get("sale_date"))
@@ -274,7 +269,6 @@ async def upload_sales_excel(
         except Exception as e:
             errors.append(f"ردیف {idx + 2}: {str(e)}")
 
-    # Never wipe existing data when the file produced nothing usable
     if not items and (mode == "replace" or skipped_duplicates == 0):
         raise HTTPException(
             status_code=400,
@@ -298,4 +292,241 @@ async def upload_sales_excel(
         "skipped_totals": skipped_totals,
         "skipped_nonpositive": skipped_nonpositive,
         "errors": errors[:30],
+    }
+
+
+# ===== آپلود انبار (Inventory Upload) =====
+
+@router.post("/inventory-excel")
+async def upload_inventory_excel(
+        file: UploadFile = File(...),
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+):
+    """آپلود فایل اکسل انبار (مرور تعدادی یا مبلغی)"""
+
+    # ✅ استفاده از read_uploaded_table که حالا با فایل موقت کار می‌کند
+    df = await read_uploaded_table(file)
+
+    # نرمال‌سازی نام ستون‌ها
+    df.columns = [str(c).strip() for c in df.columns]
+
+    created = 0
+    risk_high = 0
+    risk_medium = 0
+    risk_low = 0
+    skipped_rows = 0
+
+    for idx, row in df.iterrows():
+        try:
+            code = None
+            name = None
+            quantity = 0.0
+            amount = 0.0
+            unit_price = 0.0
+
+            for col in df.columns:
+                col_str = str(col).strip()
+
+                if "کد کالا" in col_str or col_str == "کد":
+                    code = str(row[col]).strip() if pd.notna(row[col]) else None
+                elif "عنوان کالا" in col_str or "کالا عنوان" in col_str or col_str == "کالا":
+                    name = str(row[col]).strip() if pd.notna(row[col]) else None
+                elif col_str == "موجودی" or "موجودی-مقدار" in col_str:
+                    try:
+                        quantity = float(row[col]) if pd.notna(row[col]) else 0.0
+                    except (ValueError, TypeError):
+                        quantity = 0.0
+                elif "موجودی-واحد فرعی" in col_str:
+                    try:
+                        if quantity == 0.0:
+                            quantity = float(row[col]) if pd.notna(row[col]) else 0.0
+                    except (ValueError, TypeError):
+                        pass
+                elif "موجودی-مبلغ" in col_str:
+                    try:
+                        amount = float(row[col]) if pd.notna(row[col]) else 0.0
+                    except (ValueError, TypeError):
+                        amount = 0.0
+                elif "فی متوسط" in col_str or "موجودی-فی" in col_str:
+                    try:
+                        unit_price = float(row[col]) if pd.notna(row[col]) else 0.0
+                    except (ValueError, TypeError):
+                        unit_price = 0.0
+
+            if not name:
+                skipped_rows += 1
+                continue
+
+            if amount == 0.0 and unit_price > 0.0:
+                amount = quantity * unit_price
+
+            risk_level = "low"
+            risk_score = 0
+            status = "active"
+
+            if quantity == 0:
+                risk_level = "high"
+                risk_score = 85
+                risk_high += 1
+                status = "out_of_stock"
+            elif quantity < 10:
+                risk_level = "medium"
+                risk_score = 50
+                risk_medium += 1
+                status = "low_stock"
+            else:
+                risk_level = "low"
+                risk_score = 10
+                risk_low += 1
+                status = "active"
+
+            inventory_item = InventoryItem(
+                code=code,
+                name=name,
+                category="محصول",
+                quantity=quantity,
+                unit_price=unit_price,
+                total_value=amount,
+                risk_level=risk_level,
+                risk_score=risk_score,
+                status=status
+            )
+            db.add(inventory_item)
+            created += 1
+
+        except Exception as e:
+            print(f"خطا در پردازش ردیف {idx + 2}: {e}")
+            skipped_rows += 1
+            continue
+
+    await db.commit()
+
+    return {
+        "message": "آپلود انبار با موفقیت انجام شد",
+        "created": created,
+        "skipped_rows": skipped_rows,
+        "risk_summary": {
+            "high": risk_high,
+            "medium": risk_medium,
+            "low": risk_low
+        }
+    }
+
+
+# ===== آپلود مانده حساب‌ها (Financial Accounts Upload) =====
+
+@router.post("/financial-accounts-excel")
+async def upload_financial_accounts_excel(
+        file: UploadFile = File(...),
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+):
+    """آپلود فایل اکسل مانده حساب اشخاص (دریافتنی/پرداختنی)"""
+
+    df = await read_uploaded_table(file)
+    df.columns = [str(c).strip() for c in df.columns]
+
+    created = 0
+    risk_high = 0
+    risk_medium = 0
+    risk_low = 0
+    skipped_rows = 0
+    total_amount = Decimal("0")
+
+    for idx, row in df.iterrows():
+        try:
+            code = None
+            name = None
+            amount = Decimal("0")
+
+            # پیدا کردن ستون‌ها با نام‌های مختلف
+            for col in df.columns:
+                col_str = str(col).strip()
+
+                # کد
+                if col_str == "کد" or "کد" in col_str:
+                    code = str(row[col]).strip() if pd.notna(row[col]) else None
+
+                # عنوان/نام
+                elif col_str == "عنوان" or "عنوان" in col_str or "نام" in col_str:
+                    name = str(row[col]).strip() if pd.notna(row[col]) else None
+
+                # مانده/مبلغ
+                elif col_str == "مانده" or "مبلغ" in col_str or "مانده" in col_str:
+                    try:
+                        # پاک‌سازی مبلغ (حذف کاما و تبدیل به عدد)
+                        amount_str = str(row[col]).replace(",", "").strip()
+                        amount = Decimal(amount_str) if amount_str else Decimal("0")
+                    except:
+                        amount = Decimal("0")
+
+            # اگر نام خالی بود، رد کن
+            if not name:
+                skipped_rows += 1
+                continue
+
+            # تشخیص نوع (دریافتنی یا پرداختنی) بر اساس علامت مبلغ
+            tx_type = "receivable" if amount > 0 else "payable"
+            amount = abs(amount)
+
+            # محاسبه ریسک بر اساس مبلغ
+            risk_level = "low"
+            risk_score = 0
+            status = "normal"
+
+            if amount > 50_000_000_000:  # بالای ۵۰ میلیارد
+                risk_level = "high"
+                risk_score = 85
+                risk_high += 1
+                status = "needs_review"
+            elif amount > 10_000_000_000:  # بالای ۱۰ میلیارد
+                risk_level = "medium"
+                risk_score = 50
+                risk_medium += 1
+                status = "normal"
+            else:
+                risk_level = "low"
+                risk_score = 10
+                risk_low += 1
+                status = "normal"
+
+            # ساخت رکورد تراکنش مالی
+            finance_tx = FinanceTransaction(
+                type=tx_type,
+                amount=amount,
+                transaction_date=date.today().strftime("%Y-%m-%d"),
+                party_name=name,
+                description=f"مانده حساب - کد {code}",
+                reference_number=code,
+                status=status,
+                risk_level=risk_level,
+                risk_score=risk_score,
+                is_duplicate=False,
+                has_bank_change=False,
+                amount_anomaly=(amount > 50_000_000_000),
+                needs_followup=(status == "needs_review"),
+                created_at=datetime.now()
+            )
+            db.add(finance_tx)
+            created += 1
+            total_amount += amount
+
+        except Exception as e:
+            print(f"خطا در پردازش ردیف {idx + 2}: {e}")
+            skipped_rows += 1
+            continue
+
+    await db.commit()
+
+    return {
+        "message": "آپلود مانده حساب‌ها با موفقیت انجام شد",
+        "created": created,
+        "total_amount": str(total_amount),
+        "skipped_rows": skipped_rows,
+        "risk_summary": {
+            "high": risk_high,
+            "medium": risk_medium,
+            "low": risk_low
+        }
     }

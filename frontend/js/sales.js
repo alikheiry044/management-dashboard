@@ -1,5 +1,4 @@
-// Requires js/api.js to be loaded before this file in sales.html
-// بخش «فاکتورهای فروش»؛ داده از GET /sales/ (فیلدهای SalesInvoiceOut)
+// Requires js/api.js
 requireLogin();
 
 document.getElementById("logoutBtn")?.addEventListener("click", function (e) {
@@ -9,70 +8,66 @@ document.getElementById("logoutBtn")?.addEventListener("click", function (e) {
 
 (function () {
     const PAGE = 100;
-    const STATUS = {
-        pending: { text: "در انتظار تسویه", cls: "warning" },
-        completed: { text: "تسویه‌شده", cls: "success" },
+    const $ = (id) => document.getElementById(id);
+    const setText = (id, text) => {
+        const el = $(id);
+        if (el) el.textContent = text;
     };
 
     let all = [];
     let filtered = [];
     let shown = PAGE;
 
-    const $ = (id) => document.getElementById(id);
-    const setText = (id, text) => { const el = $(id); if (el) el.textContent = text; };
-
-    // Decimal از سرور به‌صورت رشته می‌آید؛ همه‌جا به عدد تبدیل می‌شود
     function normalize(item) {
-        const description = String(item.description || "").replace(/^نوع تسویه\s*:\s*/, "").trim();
         return {
-            invoice: item.invoice_number || "",
-            customer: item.customer_name || "-",
-            date: String(item.sale_date || ""),
-            amount: Number(item.amount) || 0,
-            remaining: Number(item.remaining_amount) || 0,
-            description,
-            status: item.status || (Number(item.remaining_amount) > 0 ? "pending" : "completed"),
+            code: item.detail_code || item.code || "",
+            name: item.title || item.name || "-",
+            balance: Number(item.balance) || 0,
         };
     }
 
-    const norm = (s) => String(s || "").replace(/ي/g, "ی").replace(/ك/g, "ک").toLowerCase();
-
-    function normDate(s) {
-        const t = String(s || "").trim().replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d));
-        const m = t.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
-        return m ? `${m[1]}/${m[2].padStart(2, "0")}/${m[3].padStart(2, "0")}` : "";
-    }
+    const norm = (s) =>
+        String(s || "")
+            .replace(/ي/g, "ی")
+            .replace(/ك/g, "ک")
+            .toLowerCase();
 
     function applyFilters() {
-        const status = $("saleStatus")?.value || "";
-        const from = normDate($("saleFrom")?.value);
-        const to = normDate($("saleTo")?.value);
         const term = norm($("saleSearch")?.value).trim();
+        const onlyDebt = $("saleOnlyDebt")?.checked;
 
-        filtered = all.filter((s) =>
-            (!status || s.status === status) &&
-            (!from || s.date >= from) &&
-            (!to || s.date <= to) &&
-            (!term || norm(`${s.customer} ${s.invoice} ${s.description}`).includes(term)));
+        filtered = all.filter((s) => {
+            if (onlyDebt && s.balance <= 0) return false;
+            if (!term) return true;
+            return norm(`${s.code} ${s.name}`).includes(term);
+        });
         shown = PAGE;
         render();
     }
 
-    ["saleStatus"].forEach((id) => $(id)?.addEventListener("change", applyFilters));
-    ["saleFrom", "saleTo", "saleSearch"].forEach((id) => $(id)?.addEventListener("input", applyFilters));
+    $("saleSearch")?.addEventListener("input", applyFilters);
+    $("saleOnlyDebt")?.addEventListener("change", applyFilters);
     $("saleClear")?.addEventListener("click", () => {
-        ["saleFrom", "saleTo", "saleSearch"].forEach((id) => { if ($(id)) $(id).value = ""; });
-        if ($("saleStatus")) $("saleStatus").value = "";
+        if ($("saleSearch")) $("saleSearch").value = "";
+        if ($("saleOnlyDebt")) $("saleOnlyDebt").checked = false;
         applyFilters();
     });
-    $("saleMore")?.addEventListener("click", () => { shown += PAGE; renderTable(); });
+    $("saleMore")?.addEventListener("click", () => {
+        shown += PAGE;
+        renderTable();
+    });
 
     function render() {
-        const open = filtered.filter((s) => s.remaining > 0);
-        setText("kpiSaleTotal", formatNumber(filtered.reduce((t, s) => t + s.amount, 0)));
-        setText("kpiSaleOpen", formatNumber(open.reduce((t, s) => t + s.remaining, 0)));
+        const debtors = filtered.filter((s) => s.balance > 0);
+        const totalRecv = debtors.reduce((t, s) => t + s.balance, 0);
+        const totalCredit = filtered
+            .filter((s) => s.balance < 0)
+            .reduce((t, s) => t + Math.abs(s.balance), 0);
+
+        setText("kpiSaleTotal", formatNumber(totalRecv));
+        setText("kpiSaleOpen", formatNumber(totalCredit));
         setText("kpiSaleCount", formatNumber(filtered.length));
-        setText("kpiSaleOpenCount", formatNumber(open.length));
+        setText("kpiSaleOpenCount", formatNumber(debtors.length));
         renderTable();
     }
 
@@ -80,26 +75,46 @@ document.getElementById("logoutBtn")?.addEventListener("click", function (e) {
         const tbody = $("salesBody") || document.querySelector("#salesTable tbody");
         if (!tbody) return;
 
-        tbody.innerHTML = filtered.slice(0, shown).map((s) => {
-            const st = STATUS[s.status] || { text: s.status, cls: "" };
-            const remaining = s.remaining > 0
-                ? `<strong class="neg">${formatNumber(s.remaining)}</strong>`
-                : '<span class="muted">-</span>';
-            return `
+        if (!filtered.length) {
+            tbody.innerHTML = `
                 <tr>
-                    <td>${s.invoice ? escapeHtml(toPersianDigits(s.invoice)) : '<span class="muted">-</span>'}</td>
-                    <td>${escapeHtml(s.customer)}</td>
-                    <td>${escapeHtml(toPersianDigits(s.date))}</td>
-                    <td>${formatNumber(s.amount)}</td>
-                    <td>${remaining}</td>
-                    <td class="clip" title="${escapeHtml(s.description)}">${s.description ? escapeHtml(toPersianDigits(s.description)) : '<span class="muted">-</span>'}</td>
-                    <td><span class="badge ${st.cls}">${escapeHtml(st.text)}</span></td>
+                    <td colspan="4" style="text-align:center;padding:28px;color:#6b7280">
+                        مشتری‌ای یافت نشد. فایل مرور فروش را آپلود کنید.
+                    </td>
                 </tr>`;
-        }).join("");
+            setText("saleCount", "");
+            const more = $("saleMore");
+            if (more) more.hidden = true;
+            return;
+        }
 
-        setText("saleCount", filtered.length
-            ? `نمایش ${formatNumber(Math.min(shown, filtered.length))} از ${formatNumber(filtered.length)} فاکتور`
-            : "فاکتوری یافت نشد");
+        tbody.innerHTML = filtered
+            .slice(0, shown)
+            .map((s) => {
+                let badge = '<span class="badge success">صفر</span>';
+                let balHtml = formatNumber(s.balance);
+                if (s.balance > 0) {
+                    badge = '<span class="badge warning">بدهکار</span>';
+                    balHtml = `<strong>${formatNumber(s.balance)}</strong>`;
+                } else if (s.balance < 0) {
+                    badge = '<span class="badge danger">بستانکار</span>';
+                    balHtml = `<span class="neg">${formatNumber(s.balance)}</span>`;
+                }
+
+                return `
+                <tr>
+                    <td>${s.code ? escapeHtml(toPersianDigits(s.code)) : '<span class="muted">-</span>'}</td>
+                    <td><b>${escapeHtml(s.name)}</b></td>
+                    <td>${balHtml}</td>
+                    <td>${badge}</td>
+                </tr>`;
+            })
+            .join("");
+
+        setText(
+            "saleCount",
+            `نمایش ${formatNumber(Math.min(shown, filtered.length))} از ${formatNumber(filtered.length)} مشتری`
+        );
         const more = $("saleMore");
         if (more) more.hidden = shown >= filtered.length;
     }
@@ -107,13 +122,20 @@ document.getElementById("logoutBtn")?.addEventListener("click", function (e) {
     async function loadSales() {
         const message = $("message");
         try {
-            const data = await apiGet("/sales/");
-            all = (Array.isArray(data) ? data : []).map(normalize);
+            const data = await apiGet("/party-balances/");
+            const items = data.items || data || [];
+            all = (Array.isArray(items) ? items : []).map(normalize);
+
+            // KPI از totals سرور اگر بود
+            if (data.totals && $("kpiSaleTotal")) {
+                // بعداً با applyFilters هم آپدیت می‌شود
+            }
 
             if (message) {
+                message.style.color = "";
                 message.textContent = all.length
-                    ? `${formatNumber(all.length)} فاکتور — مبالغ به ${CURRENCY_LABEL}`
-                    : "هنوز فاکتوری ثبت نشده. فایل فاکتورهای فروش را از بالای صفحه آپلود کنید.";
+                    ? `${formatNumber(all.length)} مشتری — مبالغ به ${typeof CURRENCY_LABEL !== "undefined" ? CURRENCY_LABEL : "ریال"}`
+                    : "هنوز داده‌ای نیست. فایل مرور فروش را آپلود کنید.";
             }
             applyFilters();
         } catch (error) {
@@ -121,9 +143,53 @@ document.getElementById("logoutBtn")?.addEventListener("click", function (e) {
                 message.style.color = "var(--danger)";
                 message.textContent = error.message || "خطا در دریافت لیست فروش";
             }
-            console.error("Sales load error:", error);
+            console.error(error);
         }
     }
+
+    // آپلود
+    $("salesUploadBtn")?.addEventListener("click", async function () {
+        const fileInput = $("salesFile");
+        const msg = $("salesUploadMsg");
+        const file = fileInput?.files?.[0];
+        const btn = this;
+
+        if (!file) {
+            if (msg) {
+                msg.style.color = "var(--danger)";
+                msg.textContent = "فایل را انتخاب کنید";
+            }
+            return;
+        }
+
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "در حال آپلود...";
+        if (msg) {
+            msg.style.color = "";
+            msg.textContent = "در حال پردازش...";
+        }
+
+        try {
+            const result = await apiUpload("/party-balances/upload", file);
+            if (msg) {
+                msg.style.color = "var(--success, #15966f)";
+                msg.textContent =
+                    result.message ||
+                    `آپلود انجام شد — ${result.inserted ?? result.created ?? 0} مورد`;
+            }
+            if (fileInput) fileInput.value = "";
+            await loadSales();
+        } catch (error) {
+            if (msg) {
+                msg.style.color = "var(--danger)";
+                msg.textContent = error.message || "آپلود ناموفق بود";
+            }
+        } finally {
+            btn.disabled = false;
+            btn.textContent = original;
+        }
+    });
 
     loadSales();
 })();

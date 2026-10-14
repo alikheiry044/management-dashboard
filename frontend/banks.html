@@ -22,57 +22,129 @@
 
     <main class="content">
         <header>
-            <h1>حساب‌های بانکی</h1>
+            <h1>بانک</h1>
             <p id="message">در حال دریافت اطلاعات...</p>
         </header>
 
-        <!-- آپلود گزارش «مرور بانک‌ها (دریافت و پرداخت)» -->
-        <section class="card upload-panel" id="uploadPanel" data-kind="bank">
-            <div class="upload-head">
-                <h3>آپلود و به‌روزرسانی گزارش بانک‌ها</h3>
-                <small>فایل «مرور بانک‌ها (دریافت و پرداخت)» — هر آپلود جایگزین گزارش قبلی می‌شود.</small>
-            </div>
-            <div class="upload-row">
-                <input type="file" id="uploadFile" accept=".xlsx,.xls">
-                <button type="button" id="uploadBtn">آپلود گزارش بانک‌ها</button>
-            </div>
-            <p id="uploadResult" class="upload-result" role="status"></p>
-        </section>
+        <!-- تب حساب‌ها / چک‌ها -->
+        <nav class="tabs" id="bankTabs" aria-label="بخش بانک">
+            <button type="button" class="tab active" data-view="accounts">حساب‌ها</button>
+            <button type="button" class="tab" data-view="checks">چک‌ها</button>
+        </nav>
 
-        <!-- خلاصه -->
-        <section class="cards" id="bankCards" style="display:none;">
-            <div class="card"><h3>تعداد حساب‌ها</h3><p id="kpiCount">—</p></div>
-            <div class="card"><h3>جمع دریافت‌ها</h3><p id="kpiReceipts">—</p></div>
-            <div class="card"><h3>جمع پرداخت‌ها</h3><p id="kpiPayments">—</p></div>
-            <div class="card"><h3>جمع مانده</h3><p id="kpiBalance">—</p></div>
-        </section>
+        <!-- ========== حساب‌ها ========== -->
+        <div id="accountsSection">
+            <section class="card upload-panel" id="uploadPanel" data-kind="bank">
+                <div class="upload-head">
+                    <h3>آپلود و به‌روزرسانی گزارش بانک‌ها</h3>
+                    <small>فایل «مرور بانک‌ها (دریافت و پرداخت)» — هر آپلود جایگزین گزارش قبلی می‌شود.</small>
+                </div>
+                <div class="upload-row">
+                    <input type="file" id="uploadFile" accept=".xlsx,.xls">
+                    <button type="button" id="uploadBtn">آپلود گزارش بانک‌ها</button>
+                </div>
+                <p id="uploadResult" class="upload-result" role="status"></p>
+            </section>
 
-        <div class="toolbar">
-            <input type="search" id="searchInput" placeholder="جستجوی کد، عنوان یا شماره حساب...">
-            <span id="countText" class="table-summary"></span>
+            <section class="cards" id="bankCards" style="display:none;">
+                <div class="card"><h3>تعداد حساب‌ها</h3><p id="kpiCount">—</p></div>
+                <div class="card"><h3>جمع دریافت‌ها</h3><p id="kpiReceipts">—</p></div>
+                <div class="card"><h3>جمع پرداخت‌ها</h3><p id="kpiPayments">—</p></div>
+                <div class="card"><h3>جمع مانده</h3><p id="kpiBalance">—</p></div>
+            </section>
+
+            <div class="toolbar">
+                <input type="search" id="searchInput" placeholder="جستجوی کد، عنوان یا شماره حساب...">
+                <span id="countText" class="table-summary"></span>
+            </div>
+
+            <section class="table-container">
+                <table id="bankTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>کد</th>
+                            <th>عنوان حساب</th>
+                            <th>شماره حساب</th>
+                            <th>اول دوره</th>
+                            <th>دریافت‌ها</th>
+                            <th>پرداخت‌ها</th>
+                            <th>مانده</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bankBody"></tbody>
+                </table>
+            </section>
         </div>
 
-        <section class="table-container">
-            <table id="bankTable" class="data-table">
-                <thead>
-                    <tr>
-                        <th>کد</th>
-                        <th>عنوان حساب</th>
-                        <th>شماره حساب</th>
-                        <th>اول دوره</th>
-                        <th>دریافت‌ها</th>
-                        <th>پرداخت‌ها</th>
-                        <th>مانده</th>
-                    </tr>
-                </thead>
-                <tbody id="bankBody"></tbody>
-            </table>
-        </section>
+        <!-- ========== چک‌ها ========== -->
+        <div id="checksSection" hidden>
+            <section class="card upload-panel">
+                <div class="upload-head">
+                    <h3>آپلود چک‌ها</h3>
+                    <small>نوع فایل را انتخاب کنید؛ فقط چک‌های همان نوع به‌روز می‌شود.</small>
+                </div>
+                <div class="upload-row">
+                    <label for="checkType">نوع فایل</label>
+                    <select id="checkType">
+                        <option value="payable_check">چک‌های پرداختنی (مرور بانک چک پرداختنی)</option>
+                        <option value="payable_check_passed">چک‌های پرداختنی پاس‌شده</option>
+                        <option value="receivable_check">چک‌های دریافتنی (مرور بانک چک دریافتنی)</option>
+                        <option value="receivable_check_spent">چک‌های دریافتی خرج‌شده</option>
+                    </select>
+                    <input type="file" id="checkFile" accept=".xlsx,.xls,.csv">
+                    <button type="button" id="checkUploadBtn">آپلود چک</button>
+                </div>
+                <p id="checkUploadMsg" class="upload-result" role="status"></p>
+            </section>
+
+            <section class="cards">
+                <div class="card"><h3>تعداد چک</h3><p id="kpiCheckCount">—</p></div>
+                <div class="card"><h3>جمع مبلغ</h3><p id="kpiCheckTotal">—</p></div>
+                <div class="card"><h3>خرج‌شده</h3><p id="kpiCheckSpent">—</p></div>
+                <div class="card"><h3>سایر وضعیت</h3><p id="kpiCheckOther">—</p></div>
+            </section>
+
+            <div class="toolbar">
+                <select id="checkKindFilter">
+                    <option value="">پرداختنی و دریافتنی</option>
+                    <option value="payable_check">فقط پرداختنی</option>
+                    <option value="receivable_check">فقط دریافتنی</option>
+                </select>
+                <select id="checkStatusFilter">
+                    <option value="">همه وضعیت‌ها</option>
+                    <option value="spent">خرج‌شده</option>
+                    <option value="passed">پاس‌شده</option>
+                    <option value="open">در جریان</option>
+                    <option value="returned">برگشتی</option>
+                </select>
+                <input type="search" id="checkSearch" placeholder="جستجوی طرف، شماره چک، بانک...">
+                <span id="checkCount" class="table-summary"></span>
+            </div>
+
+            <section class="table-container">
+                <table class="data-table" id="checksTable">
+                    <thead>
+                        <tr>
+                            <th>شماره</th>
+                            <th>طرف مقابل</th>
+                            <th>مبلغ</th>
+                            <th>سررسید</th>
+                            <th>بانک / حساب</th>
+                            <th>وضعیت</th>
+                            <th>تاریخ وصول</th>
+                        </tr>
+                    </thead>
+                    <tbody id="checksBody"></tbody>
+                </table>
+            </section>
+        </div>
     </main>
 </div>
 
 <script src="js/api.js"></script>
 <script src="js/uploader.js"></script>
 <script src="js/banks.js"></script>
+<script src="js/checks.js"></script>
+
 </body>
 </html>

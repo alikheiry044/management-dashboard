@@ -27,7 +27,7 @@
         </header>
 
         <!-- آپلود و به‌روزرسانی: نوع فایل را انتخاب کنید -->
-        <section class="card upload-panel" id="uploadPanel">
+        <section class="card upload-panel" id="uploadPanel" data-kind="receivable">
             <div class="upload-head">
                 <h3>آپلود و به‌روزرسانی داده‌های مالی</h3>
                 <small>هر نوع فایل را جداگانه آپلود کنید؛ فقط داده‌ی همان نوع به‌روز می‌شود.</small>
@@ -38,6 +38,8 @@
                     <option value="receivable">مطالبات (دریافتنی)</option>
                     <option value="payable">بدهی‌ها (بستانکاری)</option>
                     <option value="expense">گزارش هزینه</option>
+                    <option value="payment">پرداخت‌ها</option>
+                    <option value="receipt">دریافت‌ها</option>
                 </select>
                 <input type="file" id="uploadFile" accept=".xlsx,.xls,.csv">
                 <button type="button" id="uploadBtn">آپلود فایل</button>

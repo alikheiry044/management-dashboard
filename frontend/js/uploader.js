@@ -19,6 +19,8 @@
         expense: "/upload/expense-report",
         bank: "/banks/upload",
         balances: "/party-balances/upload",   // مانده مشتریان (فایل «مرور فروش»)
+        payment: "/upload/payments-excel",
+        receipt: "/upload/receipts-excel",
     };
 
     const UPLOAD_ALLOWED_EXT = [".xlsx", ".xls", ".csv"];
@@ -90,7 +92,7 @@
             const kind = typeSelect ? typeSelect.value : panel.dataset.kind;
             const path = UPLOAD_ENDPOINTS[kind];
             // پارامتر mode فقط برای فاکتورهای فروش معنی دارد
-            const mode = kind === "sales" ? document.getElementById("uploadMode")?.value : undefined;
+            const mode = kind === "sales" ? (document.getElementById("uploadMode")?.value || undefined) : undefined;
             const file = fileInput.files[0];
 
             if (!path) return setResult("نوع فایل نامشخص است", false);
@@ -141,7 +143,7 @@
                 reloading = true;
                 setTimeout(() => window.location.reload(), hasWarnings(data) ? 6000 : 1200);
             } catch (error) {
-                setResult(error.message || "آپلود ناموفق بود", false);
+                setResult(errorToText(error) || "آپلود ناموفق بود", false);
                 console.error("Upload error:", error);
             } finally {
                 if (!reloading) {

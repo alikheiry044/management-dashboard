@@ -9,8 +9,8 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.supplier import Supplier
 from app.api.upload import normalize_persian, clean_amount
-from app.api.upload_finance import _read_uploaded_table, _is_total_row
 
+from app.api.upload_finance import _read_df as _read_uploaded_table, _is_total as _is_total_row
 router = APIRouter(
     prefix="/suppliers",
     tags=["Suppliers"],

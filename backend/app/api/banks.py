@@ -39,16 +39,18 @@ async def list_bank_accounts(
 @router.post("/upload", response_model=BankUploadOut)
 async def upload_bank_accounts(
     file: UploadFile = File(...),
-    file_type: str | None = Form(None),  # از فرانت ارسال می‌شود؛ اینجا لازم نیست
+    file_type: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # همان تابع خواندن فایل پروژه (xls / xlsx / xml / html و محدودیت حجم ۲۰ مگابایت)
     try:
-        # keep_text=True: کدها مثل «039» با صفر اول خوانده شوند (نیاز به تغییر کوچک در upload.py)
-        df = await read_uploaded_table(file, keep_text=True)
-    except TypeError:
-        df = await read_uploaded_table(file)
+        try:
+            df = await read_uploaded_table(file, keep_text=True)
+        except TypeError:
+            df = await read_uploaded_table(file)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"خواندن فایل ممکن نشد: {e}")
+
     rows = [list(df.columns)] + df.astype(object).where(df.notna(), None).values.tolist()
 
     try:
@@ -56,7 +58,18 @@ async def upload_bank_accounts(
     except BankParseError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    # این گزارش «وضعیت کامل» بانک‌هاست؛ پس جایگزین داده‌ی قبلی می‌شود (در یک تراکنش)
+    # یکتا کردن بر اساس detail_code (آخرین ردیف می‌ماند)
+    by_code = {}
+    for r in parsed:
+        code = (r.detail_code or "").strip()
+        if not code:
+            continue
+        by_code[code] = r
+    unique = list(by_code.values())
+
+    if not unique:
+        raise HTTPException(status_code=400, detail="هیچ ردیف معتبری پیدا نشد")
+
     await db.execute(delete(BankBalance))
     db.add_all(
         BankBalance(
@@ -69,8 +82,12 @@ async def upload_bank_accounts(
             balance=r.balance,
             source_file=file.filename,
         )
-        for r in parsed
+        for r in unique
     )
     await db.commit()
 
-    return {"message": "گزارش بانک‌ها بارگذاری شد", "inserted": len(parsed)}
+    return {
+        "message": "گزارش بانک‌ها بارگذاری شد",
+        "inserted": len(unique),
+        "skipped_duplicates": len(parsed) - len(unique),
+    }

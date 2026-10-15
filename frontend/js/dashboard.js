@@ -28,10 +28,70 @@ if (!requireLogin()) throw new Error("not authenticated");
         return formatNumber(value) + " " + CURRENCY_LABEL;
     }
 
+    function formatCount(value) {
+        if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "-";
+        return formatNumber(value);
+    }
+
     // امتیاز سلامت یک‌جا محاسبه می‌شود (قبلاً در دو جا جدا بود و یکی NaN می‌داد)
     function calcHealthScore(riskOverview) {
         const avg = Number(riskOverview?.average_risk_score) || 0;
         return Math.max(0, 100 - Math.round(avg));
+    }
+
+    // ===== کارت‌های KPI که منبع جداگانه دارند =====
+    // آدرس APIهای زیر را با endpoint واقعی بک‌اند خودتان پر کنید.
+    // null = هنوز منبعی تعریف نشده و کارت «-» نشان می‌دهد.
+    // پاسخ می‌تواند عدد ساده یا آبجکتی با total / total_amount / value باشد.
+    const KPI_ENDPOINTS = {
+        kpiReceivables: null,   // مثلاً "/finance/receivables/total"
+        kpiPayables: null,      // مثلاً "/finance/payables/total"
+        kpiBank: null,          // مثلاً "/banks/balance"
+        kpiInventory: null      // مثلاً "/inventory/value"
+    };
+
+    // مقادیر KPI که برای گزارش لازم است (کارت‌ها هنگام بارگذاری آن را پر می‌کنند)
+    const kpiData = {};
+
+    function pickValue(d) {
+        if (d === null || d === undefined) return null;
+        if (typeof d === "number" || typeof d === "string") return d;
+        return d.total ?? d.total_amount ?? d.value ?? null;
+    }
+
+    async function loadMoneyKpi(id, path) {
+        if (!path) {
+            setText(id, "-");
+            return;
+        }
+        try {
+            const value = pickValue(await apiGet(path));
+            kpiData[id] = value;
+            setText(id, formatMoney(value));
+        } catch (err) {
+            console.warn("KPI " + id + " skipped:", err.message);
+            setText(id, "-");
+        }
+    }
+
+    async function loadChecksKpi() {
+        try {
+            const data = await apiGet("/checks/summary");
+            kpiData.checks = data || null;
+            setText("kpiChecks", formatCount(data?.count));
+        } catch (err) {
+            console.warn("KPI kpiChecks skipped:", err.message);
+            setText("kpiChecks", "-");
+        }
+    }
+
+    // این کارت‌ها مستقل از خلاصه مالی و ریسک بارگذاری می‌شوند
+    function loadIndependentKpis() {
+        const jobs = [loadChecksKpi()];
+        Object.keys(KPI_ENDPOINTS).forEach(function (id) {
+            jobs.push(loadMoneyKpi(id, KPI_ENDPOINTS[id]));
+        });
+        return Promise.all(jobs);
     }
 
     // ===== هشدارهای ریسک =====
@@ -68,20 +128,81 @@ if (!requireLogin()) throw new Error("not authenticated");
     // ===== گزارش مدیریتی =====
     let reportText = "";
 
-    function composeReport(summary, riskOverview) {
+    const CHECK_STATUS_LABEL = {
+        open: "در جریان",
+        passed: "پاس‌شده",
+        spent: "خرج‌شده",
+        returned: "برگشتی",
+        unknown: "نامشخص"
+    };
+
+    function hasValue(v) {
+        return v !== null && v !== undefined && v !== "" && !Number.isNaN(Number(v));
+    }
+
+    function moneyLine(label, value) {
+        return hasValue(value)
+            ? label + ": " + formatMoney(value) + "."
+            : label + ": اطلاعات در دسترس نیست.";
+    }
+
+    // گزارش به ترتیب چرخهٔ کسب‌وکار: فروش ← مطالبات و چک ← بانک ← بدهی ← انبار ← ریسک ← اقدامات
+    function composeReport(summary, riskOverview, alertsCount) {
         const healthScore = calcHealthScore(riskOverview);
+        const checks = kpiData.checks || null;
+
+        // --- چک‌ها ---
+        const checkLines = [];
+        if (checks) {
+            checkLines.push(
+                "تعداد چک‌های ثبت‌شده: " + formatCount(checks.count) +
+                " فقره، به مبلغ کل " + formatMoney(checks.total_amount) + "."
+            );
+            const parts = Object.entries(checks.by_status || {}).map(function (entry) {
+                return (CHECK_STATUS_LABEL[entry[0]] || entry[0]) + ": " + formatNumber(entry[1]);
+            });
+            if (parts.length) checkLines.push("وضعیت چک‌ها — " + parts.join(" | ") + ".");
+        } else {
+            checkLines.push("اطلاعات چک‌ها در دسترس نیست.");
+        }
+
+        // --- اقدامات فوری ---
+        const urgent = [
+            formatNumber(summary.pending_review) + " تراکنش در صف بررسی نیازمند تصمیم‌گیری.",
+            formatNumber(summary.stopped) + " تراکنش به دلیل ریسک بالا متوقف شده‌اند."
+        ];
+        const returned = Number(checks?.by_status?.returned) || 0;
+        if (returned > 0) urgent.push(formatNumber(returned) + " چک برگشتی نیازمند پیگیری است.");
+        if (alertsCount > 0) urgent.push(formatNumber(alertsCount) + " هشدار ریسک فعال است.");
 
         return [
             {
-                title: "📊 خلاصه وضعیت مالی",
+                title: "1️⃣ فروش و درآمد",
                 lines: [
                     "مجموع تراکنش‌های ثبت‌شده: " + formatNumber(summary.total_transactions) + " مورد.",
                     "مجموع مبلغ تراکنش‌ها: " + formatMoney(summary.total_amount) + ".",
-                    "تأییدشده: " + formatNumber(summary.approved) + " مورد | تسویه‌شده: " + formatNumber(summary.settled) + " مورد."
+                    "تأییدشده: " + formatNumber(summary.approved) + " مورد | تسویه‌شده: " + formatNumber(summary.settled) + " مورد.",
+                    "فاکتورهای باز (در انتظار بررسی): " + formatNumber(summary.pending_review) + " مورد."
                 ]
             },
             {
-                title: "🛡 ارزیابی ریسک و سلامت کنترل",
+                title: "2️⃣ مطالبات و چک‌ها",
+                lines: [moneyLine("مجموع مطالبات", kpiData.kpiReceivables)].concat(checkLines)
+            },
+            {
+                title: "3️⃣ نقدینگی (بانک)",
+                lines: [moneyLine("مانده حساب‌های بانکی", kpiData.kpiBank)]
+            },
+            {
+                title: "4️⃣ بدهی‌ها",
+                lines: [moneyLine("مجموع بدهی‌ها", kpiData.kpiPayables)]
+            },
+            {
+                title: "5️⃣ انبار",
+                lines: [moneyLine("ارزش موجودی انبار", kpiData.kpiInventory)]
+            },
+            {
+                title: "6️⃣ ریسک و سلامت کنترل",
                 lines: [
                     "امتیاز سلامت کنترل سازمان: " + toPersianDigits(healthScore) + " از ۱۰۰.",
                     "تعداد تراکنش‌های پرریسک (High): " + formatNumber(riskOverview.high_risk_count) + " مورد.",
@@ -90,10 +211,7 @@ if (!requireLogin()) throw new Error("not authenticated");
             },
             {
                 title: "🔴 اقدامات فوری مورد نیاز",
-                lines: [
-                    formatNumber(summary.pending_review) + " تراکنش در صف بررسی نیازمند تصمیم‌گیری.",
-                    formatNumber(summary.stopped) + " تراکنش به دلیل ریسک بالا متوقف شده‌اند."
-                ]
+                lines: urgent
             }
         ];
     }
@@ -101,6 +219,9 @@ if (!requireLogin()) throw new Error("not authenticated");
     async function loadExecutiveDashboard() {
         const errorBox = $("errorText");
         if (errorBox) errorBox.style.display = "none";
+
+        // کارت‌های مستقل (چک، مطالبات، بدهی، بانک، انبار)؛ خطایشان به بقیه سرایت نمی‌کند
+        const independentKpis = loadIndependentKpis();
 
         try {
             // خلاصه و ریسک ضروری‌اند؛ صف بررسی اختیاری است (خطایش کل داشبورد را خراب نکند)
@@ -120,31 +241,25 @@ if (!requireLogin()) throw new Error("not authenticated");
             const queue = Array.isArray(queueRaw) ? queueRaw : (queueRaw?.items || []);
 
             // 1. کارت‌های KPI
-            setText("kpi-total-amount", formatMoney(summary.total_amount));
-            setText("kpi-total-tx-sub", "در " + formatNumber(summary.total_transactions) + " تراکنش");
-            setText("kpi-stopped-count", formatNumber(summary.stopped) + " مورد");
-            setText("kpi-pending-review", formatNumber(summary.pending_review) + " مورد");
-            setText("kpi-high-risk-sub", formatNumber(riskOverview.high_risk_count) + " مورد پرریسک");
-            setText("kpi-health-score", toPersianDigits(calcHealthScore(riskOverview)));
+            setText("kpiSales", formatMoney(summary.total_amount));
+            setText("kpiPending", formatCount(summary.pending_review));
+            setText(
+                "kpiAlerts",
+                formatCount(queueRaw === null ? riskOverview.high_risk_count : queue.length)
+            );
 
-            // 2. بخش تمرکز مدیر
-            setText("focus-high-risk", formatNumber(riskOverview.high_risk_count) + " مورد");
-            // تعداد فاکتورهای تکراری هنوز از بک‌اند نمی‌آید؛ به‌جای متن دائمی «در حال تحلیل...» خط تیره نشان می‌دهیم
-            setText("focus-duplicates", "-");
-            setText("focus-at-risk", formatMoney(riskOverview.total_at_risk_amount));
-            setText("focus-approved", formatNumber(summary.approved) + " مورد");
-
-            // 3. هشدارها
+            // 2. هشدارها
             renderAlerts(queue);
 
-            // 4. گزارش
-            const sections = composeReport(summary, riskOverview);
+            // 3. گزارش جامع (ترتیب: فروش ← مطالبات ← بانک ← بدهی ← انبار ← ریسک ← اقدامات)
+            await independentKpis;   // چک، مطالبات، بدهی، بانک و انبار برای گزارش لازم‌اند
+            const sections = composeReport(summary, riskOverview, queue.length);
             const reportBody = $("reportBody");
             if (reportBody) {
-                let html = '<p style="font-size:11px;color:var(--muted);margin:0 0 12px 0;">تولید شده در: ' +
+                let html = '<p class="report-date">تولید شده در: ' +
                     escapeHtml(new Date().toLocaleString("fa-IR")) + "</p>";
                 sections.forEach(function (sec) {
-                    html += "<h4>" + escapeHtml(sec.title) + "</h4><ul>";
+                    html += "<h3>" + escapeHtml(sec.title) + "</h3><ul>";
                     sec.lines.forEach((line) => { html += "<li>" + escapeHtml(line) + "</li>"; });
                     html += "</ul>";
                 });
@@ -158,7 +273,7 @@ if (!requireLogin()) throw new Error("not authenticated");
                 reportText += "\n";
             });
 
-            // 5. نمودارها (مستقل از هم، موازی)
+            // 4. نمودارها (مستقل از هم، موازی)
             loadAllCharts();
 
         } catch (error) {

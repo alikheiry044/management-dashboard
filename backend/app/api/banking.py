@@ -1,46 +1,41 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, desc
 from typing import List, Optional
 from datetime import date
+import os
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.finance import FinanceTransaction
+from app.services.bank_parser import parse_bank_accounts
 
 router = APIRouter(prefix="/banking", tags=["Banking"])
+
+DEFAULT_BANK_FILE = "مرور بانكها دريافت و پرداخت.xls"
 
 
 @router.get("/stats")
 async def get_banking_stats(
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """آمار عملیات بانکی"""
+    """آمار عملیات بانکی بر اساس فایل اکسل واقعی و دیتابیس"""
+    total_balance = 0.0
+    total_accounts = 0
 
-    # مجموع موجودی (از تراکنش‌های receivable منهای payable)
-    receivable_result = await db.execute(
-        select(func.sum(FinanceTransaction.amount)).where(
-            FinanceTransaction.type == "receivable"
-        )
-    )
-    receivable_total = receivable_result.scalar() or 0
+    if os.path.exists(DEFAULT_BANK_FILE):
+        try:
+            with open(DEFAULT_BANK_FILE, "rb") as f:
+                content = f.read()
+            accounts_data = parse_bank_accounts(content)
+            total_accounts = len(accounts_data)
+            total_balance = float(sum(acc.balance for acc in accounts_data))
+        except Exception:
+            pass
 
-    payable_result = await db.execute(
-        select(func.sum(FinanceTransaction.amount)).where(
-            FinanceTransaction.type == "payable"
-        )
-    )
-    payable_total = payable_result.scalar() or 0
-
-    total_balance = float(receivable_total - payable_total)
-
-    # تعداد حساب‌ها (فعلاً ثابت - بعداً از مدل BankAccount خوانده می‌شود)
-    total_accounts = 4
-
-    # تراکنش‌های امروز
     today = date.today()
     today_result = await db.execute(
         select(func.count(FinanceTransaction.id)).where(
@@ -49,7 +44,6 @@ async def get_banking_stats(
     )
     today_transactions = today_result.scalar() or 0
 
-    # مغایرت‌ها (تراکنش‌های نیازمند بررسی)
     pending_result = await db.execute(
         select(func.count(FinanceTransaction.id)).where(
             FinanceTransaction.status == "needs_review"
@@ -57,7 +51,6 @@ async def get_banking_stats(
     )
     pending_reconciliations = pending_result.scalar() or 0
 
-    # حساب‌های بدون مغایرت
     clean_accounts = max(0, total_accounts - (1 if pending_reconciliations > 0 else 0))
 
     return {
@@ -65,15 +58,15 @@ async def get_banking_stats(
         "total_accounts": total_accounts,
         "today_transactions": today_transactions,
         "pending_reconciliations": pending_reconciliations,
-        "clean_accounts": clean_accounts
+        "clean_accounts": clean_accounts,
     }
 
 
 @router.get("/transactions")
 async def get_banking_transactions(
-        limit: int = Query(10, ge=1, le=50),
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """آخرین تراکنش‌های بانکی"""
     result = await db.execute(
@@ -93,7 +86,7 @@ async def get_banking_transactions(
             "transaction_date": t.transaction_date,
             "status": t.status,
             "risk_level": t.risk_level,
-            "created_at": t.created_at.isoformat() if t.created_at else None
+            "created_at": t.created_at.isoformat() if t.created_at else None,
         }
         for t in transactions
     ]
@@ -101,45 +94,58 @@ async def get_banking_transactions(
 
 @router.get("/accounts")
 async def get_bank_accounts(
-        db: AsyncSession = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """لیست حساب‌های بانکی (نمونه - بعداً از دیتابیس خوانده می‌شود)"""
+    """لیست حساب‌های بانکی استخراج شده مستقیم از فایل اکسل مرور بانک‌ها"""
+    if not os.path.exists(DEFAULT_BANK_FILE):
+        return []
 
-    # داده‌های نمونه (بعداً از مدل BankAccount خوانده می‌شود)
-    accounts = [
-        {
-            "id": 1,
-            "name": "بانک ملت - حساب جاری",
-            "bank": "ملت",
-            "number": "0123456789",
-            "balance": 2850000000,
-            "status": "clean"
-        },
-        {
-            "id": 2,
-            "name": "بانک صادرات - حساب سپرده",
-            "bank": "صادرات",
-            "number": "9876543210",
-            "balance": 1420000000,
-            "status": "clean"
-        },
-        {
-            "id": 3,
-            "name": "بانک پارسیان - حساب ارزی",
-            "bank": "پارسیان",
-            "number": "5551234567",
-            "balance": 680000000,
-            "status": "unmatched"
-        },
-        {
-            "id": 4,
-            "name": "بانک تجارت - حساب حقوق",
-            "bank": "تجارت",
-            "number": "7778889990",
-            "balance": 340000000,
-            "status": "clean"
+    try:
+        with open(DEFAULT_BANK_FILE, "rb") as f:
+            content = f.read()
+        accounts = parse_bank_accounts(content)
+
+        return [
+            {
+                "id": acc.detail_code,
+                "name": acc.title,
+                "bank": acc.title.split()[0] if acc.title else "نامشخص",
+                "number": acc.account_number or "-",
+                "opening_balance": acc.opening_balance,
+                "receipts": acc.receipts,
+                "payments": acc.payments,
+                "balance": acc.balance,
+                "status": "clean",
+            }
+            for acc in accounts
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"خطا در خواندن فایل اکسل بانک‌ها: {str(e)}"
+        )
+
+
+@router.post("/upload-bank-file")
+async def upload_bank_file(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """آپلود و جایگزینی فایل اکسل جدید مرور بانک‌ها"""
+    try:
+        content = await file.read()
+        accounts = parse_bank_accounts(content)
+
+        with open(DEFAULT_BANK_FILE, "wb") as f:
+            f.write(content)
+
+        return {
+            "status": "success",
+            "message": f"فایل با موفقیت آپلود شد و تعداد {len(accounts)} حساب بانکی بروزرسانی گردید.",
+            "count": len(accounts),
         }
-    ]
-
-    return accounts
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=f"فایل نامعتبر است: {str(e)}"
+        )
+    

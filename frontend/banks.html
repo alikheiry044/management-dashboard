@@ -26,7 +26,6 @@
             <p id="message">در حال دریافت اطلاعات...</p>
         </header>
 
-        <!-- تب حساب‌ها / چک‌ها -->
         <nav class="tabs" id="bankTabs" aria-label="بخش بانک">
             <button type="button" class="tab active" data-view="accounts">حساب‌ها</button>
             <button type="button" class="tab" data-view="checks">چک‌ها</button>
@@ -86,10 +85,10 @@
                 <div class="upload-row">
                     <label for="checkType">نوع فایل</label>
                     <select id="checkType">
-                        <option value="payable_check">چک‌های پرداختنی (مرور بانک چک پرداختنی)</option>
-                        <option value="payable_check_passed">چک‌های پرداختنی پاس‌شده</option>
-                        <option value="receivable_check">چک‌های دریافتنی (مرور بانک چک دریافتنی)</option>
-                        <option value="receivable_check_spent">چک‌های دریافتی خرج‌شده</option>
+                        <option value="receivable_check_spent">چک دریافتی خرج‌شده</option>
+                        <option value="receivable_check">چک دریافتنی (بانک)</option>
+                        <option value="payable_check_passed">چک پرداختنی پاس‌شده</option>
+                        <option value="payable_check">چک پرداختنی (بانک)</option>
                     </select>
                     <input type="file" id="checkFile" accept=".xlsx,.xls,.csv">
                     <button type="button" id="checkUploadBtn">آپلود چک</button>
@@ -145,6 +144,5 @@
 <script src="js/uploader.js"></script>
 <script src="js/banks.js"></script>
 <script src="js/checks.js"></script>
-
 </body>
 </html>

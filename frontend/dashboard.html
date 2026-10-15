@@ -8,78 +8,73 @@
     <link rel="stylesheet" href="css/style.css">
     <!-- کتابخانه Chart.js برای رسم نمودارها -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- نمودارها کوتاه‌تر و پهن‌تر (عدد بزرگ‌تر = نمودار کوتاه‌تر) -->
-    <script>Chart.defaults.aspectRatio = 2.4;</script>
 </head>
 <body>
 <div class="layout">
     <!-- سایدبار و ناوبری اصلی -->
     <aside class="sidebar">
-        <h2>سامانه مدیریتی</h2>
-        <ul>
-            <li><a href="dashboard.html" class="active">داشبورد</a></li>
-            <li><a href="sales.html">فروش</a></li>
-            <li><a href="finance.html">مالی</a></li>
-            <li><a href="banks.html">بانک</a></li>
-            <li><a href="inventory.html">انبار</a></li>
-            <li><a href="#" id="logoutBtn">خروج</a></li>
-        </ul>
+        <div class="brand">
+            <div class="logo">R</div>
+            <div>
+                <b>RAYAD</b>
+                <small>Business Control</small>
+            </div>
+        </div>
+        <nav class="nav">
+            <a href="dashboard.html" class="active">داشبورد</a>
+            <a href="sales.html">فروش</a>
+            <a href="finance.html">مالی</a>
+            <a href="banks.html">بانک</a>
+            <a href="inventory.html">انبار</a>
+            <a href="suppliers.html">تأمین‌کنندگان</a>
+            <a href="#" id="logoutBtn">خروج</a>
+        </nav>
     </aside>
 
     <!-- محتوای اصلی داشبورد -->
     <main class="content">
         <header>
             <h1>داشبورد</h1>
-            <p id="welcomeText">خوش آمدید</p>
+            <p id="welcomeText">مدیر سیستم</p>
             <p id="errorText" class="error"></p>
         </header>
 
-        <!-- کارت‌های KPI -->
+        <!-- ۸ کارت در یک گرید ۴ستونه -->
         <section class="cards">
-            <div class="card">
-                <h3>مجموع فروش</h3>
-                <p id="kpiSales">—</p>
+            <div class="card"><h3>مجموع فروش</h3><p id="kpiSales">—</p></div>
+            <div class="card"><h3>مطالبات</h3><p id="kpiReceivables">—</p></div>
+            <div class="card"><h3>بدهی‌ها</h3><p id="kpiPayables">—</p></div>
+            <div class="card"><h3>مانده بانک</h3><p id="kpiBank">—</p></div>
+            <div class="card"><h3>ارزش انبار</h3><p id="kpiInventory">—</p></div>
+            <div class="card"><h3>تعداد چک</h3><p id="kpiChecks">—</p></div>
+            <div class="card"><h3>فاکتور باز</h3><p id="kpiPending">—</p></div>
+            <div class="card"><h3>هشدارها</h3><p id="kpiAlerts">—</p></div>
+        </section>
+
+        <section class="charts-row">
+            <div class="chart-box">
+                <h3>روند فروش</h3>
+                <div class="chart-canvas" style="position:relative;height:240px;"><canvas id="salesTrendChart"></canvas></div>
             </div>
-            <div class="card">
-                <h3>مطالبات</h3>
-                <p id="kpiReceivables">—</p>
+            <div class="chart-box">
+                <h3>روند هزینه</h3>
+                <div class="chart-canvas" style="position:relative;height:240px;"><canvas id="expenseTrendChart"></canvas></div>
             </div>
-            <div class="card">
-                <h3>سفارش معوق</h3>
-                <p id="kpiPendingOrders">—</p>
+        </section>
+
+        <section class="bottom-row">
+            <div class="chart-box">
+                <h3>بیشترین مطالبات</h3>
+                <div class="chart-canvas" style="position:relative;height:240px;"><canvas id="receivablesTrendChart"></canvas></div>
             </div>
-            <div class="card">
+            <div class="alert-panel">
                 <h3>هشدارها</h3>
-                <p id="kpiAlerts">—</p>
+                <div id="alertsList" class="alert-list"></div>
+                <p id="alertsEmpty">هشدار مهمی وجود ندارد.</p>
             </div>
         </section>
 
-        <!-- نمودار روند فروش -->
-        <section class="chart-box">
-            <h3>روند فروش</h3>
-            <canvas id="salesTrendChart"></canvas>
-        </section>
-
-        <!-- نمودار روند هزینه -->
-        <section class="chart-box">
-            <h3>روند هزینه</h3>
-            <canvas id="expenseTrendChart"></canvas>
-        </section>
-
-        <!-- نمودار بیشترین مطالبات -->
-        <section class="chart-box">
-            <h3>بیشترین مطالبات (۱۰ مورد)</h3>
-            <canvas id="receivablesTrendChart"></canvas>
-        </section>
-
-        <!-- هشدارها -->
-        <section class="alerts">
-            <h2>هشدارها</h2>
-            <p id="alertsEmpty">هشدار مهمی وجود ندارد.</p>
-            <ul id="alertsList" class="alert-list"></ul>
-        </section>
-
-        <!-- گزارش مدیریتی -->
+        <!-- گزارش مدیریتی (JS به این بخش نیاز دارد) -->
         <section class="report">
             <h2>گزارش مدیریتی</h2>
             <div class="report-actions">

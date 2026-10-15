@@ -5,7 +5,8 @@ from app.models import User, FinanceTransaction, SalesInvoice
 from app.api import suppliers
 from app.api import auth, sales, finance, upload, dashboard
 from app.api import banking, tasks, suppliers, smart_upload
-
+from app.models.bank_check import BankCheck
+from app.api.checks import router as checks_router
 from app.api.upload_expense import router as expense_upload_router
 from app.api.party_balances import router as party_balances_router
 from app.api.upload_finance import router as upload_finance_router
@@ -15,8 +16,9 @@ from app.api.inventory import router as inventory_router
 from app.models.bank_balance import BankBalance  # noqa: F401  (تا جدول ساخته شود)
 from app.api import inventory
 from app.models.bank_check import BankCheck
-from app.api.check import router as checks_router
-
+from app.api.checks import router as checks_router
+from app.models.bank_check import BankCheck
+from app.api.checks import router as checks_router
 
 app = FastAPI(
     title="Management Dashboard API",
@@ -58,7 +60,11 @@ app.include_router(banks.router)
 app.include_router(inventory_router)
 app.include_router(party_balances_router)
 app.include_router(checks_router)
+app.include_router(checks_router)
 
+
+
+app.include_router(checks_router)
 
 app.include_router(upload_finance_router)
 @app.get("/health")
